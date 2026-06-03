@@ -50,6 +50,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   final TextEditingController _authNameController = TextEditingController();
   final TextEditingController _authEmailController = TextEditingController();
   final TextEditingController _authPasswordController = TextEditingController();
+  final TextEditingController _exhibitorNameController =
+      TextEditingController();
+  final TextEditingController _exhibitorEmailController =
+      TextEditingController();
+  final TextEditingController _boothNameController = TextEditingController();
+  final TextEditingController _productController = TextEditingController();
+  final TextEditingController _replyController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final TransformationController _transformController =
       TransformationController();
@@ -61,9 +68,26 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   double _gestureRotationStart = 0;
   int _selectedNavIndex = 0;
   bool _registerMode = false;
+  bool _exhibitorRegisterMode = false;
   bool _locationAllowed = false;
   MapTileStyle _tileStyle = MapTileStyle.openStreetMap;
   UserAccount? _account;
+  UserAccount? _exhibitorAccount;
+  String _boothName = 'SabaSaba Exhibitor Booth';
+  final List<String> _exhibitorProducts = [
+    'Product display',
+    'Customer support',
+  ];
+  final List<VisitorInquiry> _visitorInquiries = [
+    VisitorInquiry(
+      visitor: 'Asha M.',
+      message: 'Do you accept mobile payments?',
+    ),
+    VisitorInquiry(
+      visitor: 'Daniel K.',
+      message: 'What time will the product demo start?',
+    ),
+  ];
   MapFeature? _selectedArea;
   VisitorService? _selectedService;
 
@@ -71,6 +95,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   void initState() {
     super.initState();
     _mapFuture = ExhibitionMapData.load();
+    _boothNameController.text = _boothName;
     _searchFocusNode.addListener(() {
       setState(() => _searchFocused = _searchFocusNode.hasFocus);
     });
@@ -82,6 +107,11 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
     _authNameController.dispose();
     _authEmailController.dispose();
     _authPasswordController.dispose();
+    _exhibitorNameController.dispose();
+    _exhibitorEmailController.dispose();
+    _boothNameController.dispose();
+    _productController.dispose();
+    _replyController.dispose();
     _searchFocusNode.dispose();
     _transformController.dispose();
     super.dispose();
@@ -111,6 +141,11 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
             icon: Icon(Icons.info_outline),
             selectedIcon: Icon(Icons.info),
             label: 'Info',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.badge_outlined),
+            selectedIcon: Icon(Icons.badge),
+            label: 'Exhibitor',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
@@ -157,6 +192,69 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
           }
 
           if (_selectedNavIndex == 3) {
+            return _ExhibitorTab(
+              account: _exhibitorAccount,
+              registerMode: _exhibitorRegisterMode,
+              nameController: _exhibitorNameController,
+              emailController: _exhibitorEmailController,
+              boothNameController: _boothNameController,
+              productController: _productController,
+              replyController: _replyController,
+              boothName: _boothName,
+              products: _exhibitorProducts,
+              inquiries: _visitorInquiries,
+              onToggleMode: () {
+                setState(() => _exhibitorRegisterMode = !_exhibitorRegisterMode);
+              },
+              onSubmit: () {
+                final email = _exhibitorEmailController.text.trim();
+                final fallbackName =
+                    email.isEmpty ? 'Exhibitor' : email.split('@').first;
+                setState(() {
+                  _exhibitorAccount = UserAccount(
+                    name: _exhibitorRegisterMode &&
+                            _exhibitorNameController.text.trim().isNotEmpty
+                        ? _exhibitorNameController.text.trim()
+                        : fallbackName,
+                    email: email.isEmpty ? 'exhibitor@sabasaba.local' : email,
+                  );
+                });
+              },
+              onSaveBooth: () {
+                final value = _boothNameController.text.trim();
+                if (value.isEmpty) {
+                  return;
+                }
+                setState(() => _boothName = value);
+              },
+              onAddProduct: () {
+                final value = _productController.text.trim();
+                if (value.isEmpty) {
+                  return;
+                }
+                setState(() {
+                  _exhibitorProducts.add(value);
+                  _productController.clear();
+                });
+              },
+              onReply: (index) {
+                final reply = _replyController.text.trim();
+                if (reply.isEmpty) {
+                  return;
+                }
+                setState(() {
+                  _visitorInquiries[index] =
+                      _visitorInquiries[index].copyWith(response: reply);
+                  _replyController.clear();
+                });
+              },
+              onLogout: () {
+                setState(() => _exhibitorAccount = null);
+              },
+            );
+          }
+
+          if (_selectedNavIndex == 4) {
             return _YouTab(
               account: _account,
               registerMode: _registerMode,
@@ -1342,6 +1440,444 @@ class _InfoTab extends StatelessWidget {
   }
 }
 
+class _ExhibitorTab extends StatelessWidget {
+  const _ExhibitorTab({
+    required this.account,
+    required this.registerMode,
+    required this.nameController,
+    required this.emailController,
+    required this.boothNameController,
+    required this.productController,
+    required this.replyController,
+    required this.boothName,
+    required this.products,
+    required this.inquiries,
+    required this.onToggleMode,
+    required this.onSubmit,
+    required this.onSaveBooth,
+    required this.onAddProduct,
+    required this.onReply,
+    required this.onLogout,
+  });
+
+  final UserAccount? account;
+  final bool registerMode;
+  final TextEditingController nameController;
+  final TextEditingController emailController;
+  final TextEditingController boothNameController;
+  final TextEditingController productController;
+  final TextEditingController replyController;
+  final String boothName;
+  final List<String> products;
+  final List<VisitorInquiry> inquiries;
+  final VoidCallback onToggleMode;
+  final VoidCallback onSubmit;
+  final VoidCallback onSaveBooth;
+  final VoidCallback onAddProduct;
+  final ValueChanged<int> onReply;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentAccount = account;
+
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+        children: [
+          Text(
+            'Exhibitor',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: const Color(0xff0b4238),
+                ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Manage your booth, services, and visitor enquiries.',
+            style: TextStyle(color: Color(0xff40534d)),
+          ),
+          const SizedBox(height: 14),
+          if (currentAccount == null)
+            _ExhibitorLoginCard(
+              registerMode: registerMode,
+              nameController: nameController,
+              emailController: emailController,
+              onToggleMode: onToggleMode,
+              onSubmit: onSubmit,
+            )
+          else ...[
+            _ExhibitorHeader(account: currentAccount, onLogout: onLogout),
+            _ExhibitorBoothCard(
+              boothName: boothName,
+              controller: boothNameController,
+              onSave: onSaveBooth,
+            ),
+            _ExhibitorProductsCard(
+              products: products,
+              controller: productController,
+              onAdd: onAddProduct,
+            ),
+            _ExhibitorInquiryCard(
+              inquiries: inquiries,
+              replyController: replyController,
+              onReply: onReply,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ExhibitorLoginCard extends StatelessWidget {
+  const _ExhibitorLoginCard({
+    required this.registerMode,
+    required this.nameController,
+    required this.emailController,
+    required this.onToggleMode,
+    required this.onSubmit,
+  });
+
+  final bool registerMode;
+  final TextEditingController nameController;
+  final TextEditingController emailController;
+  final VoidCallback onToggleMode;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 2,
+      shadowColor: Colors.black12,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              registerMode ? 'Register exhibitor' : 'Exhibitor login',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            if (registerMode) ...[
+              _AccountField(
+                controller: nameController,
+                icon: Icons.badge_outlined,
+                label: 'Exhibitor name',
+              ),
+              const SizedBox(height: 10),
+            ],
+            _AccountField(
+              controller: emailController,
+              icon: Icons.email_outlined,
+              label: 'Business email',
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onSubmit,
+              icon: Icon(registerMode ? Icons.person_add : Icons.login),
+              label: Text(registerMode ? 'Register / Login' : 'Login'),
+            ),
+            TextButton(
+              onPressed: onToggleMode,
+              child: Text(
+                registerMode
+                    ? 'Already registered? Login'
+                    : 'New exhibitor? Register',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExhibitorHeader extends StatelessWidget {
+  const _ExhibitorHeader({
+    required this.account,
+    required this.onLogout,
+  });
+
+  final UserAccount account;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: const Color(0xff0b4238),
+        elevation: 2,
+        borderRadius: BorderRadius.circular(8),
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Colors.white,
+            child: Text(
+              account.initials,
+              style: const TextStyle(
+                color: Color(0xff0b4238),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          title: Text(
+            account.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          subtitle: Text(
+            account.email,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Color(0xffd6eee6)),
+          ),
+          trailing: IconButton(
+            tooltip: 'Logout',
+            onPressed: onLogout,
+            icon: const Icon(Icons.logout, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExhibitorBoothCard extends StatelessWidget {
+  const _ExhibitorBoothCard({
+    required this.boothName,
+    required this.controller,
+    required this.onSave,
+  });
+
+  final String boothName;
+  final TextEditingController controller;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ExhibitorSection(
+      icon: Icons.storefront,
+      title: 'Manage booth profile',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(boothName, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          _AccountField(
+            controller: controller,
+            icon: Icons.edit_location_alt_outlined,
+            label: 'Booth name or profile title',
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: onSave,
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Save booth profile'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExhibitorProductsCard extends StatelessWidget {
+  const _ExhibitorProductsCard({
+    required this.products,
+    required this.controller,
+    required this.onAdd,
+  });
+
+  final List<String> products;
+  final TextEditingController controller;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ExhibitorSection(
+      icon: Icons.inventory_2_outlined,
+      title: 'Update products / services',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final product in products)
+                Chip(
+                  side: BorderSide.none,
+                  backgroundColor: const Color(0xffe4f4ee),
+                  avatar: const Icon(Icons.check_circle_outline, size: 18),
+                  label: Text(product),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _AccountField(
+            controller: controller,
+            icon: Icons.add_business_outlined,
+            label: 'Add product or service',
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add),
+            label: const Text('Add item'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExhibitorInquiryCard extends StatelessWidget {
+  const _ExhibitorInquiryCard({
+    required this.inquiries,
+    required this.replyController,
+    required this.onReply,
+  });
+
+  final List<VisitorInquiry> inquiries;
+  final TextEditingController replyController;
+  final ValueChanged<int> onReply;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ExhibitorSection(
+      icon: Icons.question_answer_outlined,
+      title: 'Visitor enquiries',
+      child: Column(
+        children: [
+          for (var i = 0; i < inquiries.length; i++) ...[
+            _InquiryTile(
+              inquiry: inquiries[i],
+              replyController: replyController,
+              onReply: () => onReply(i),
+            ),
+            if (i != inquiries.length - 1) const Divider(height: 18),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InquiryTile extends StatelessWidget {
+  const _InquiryTile({
+    required this.inquiry,
+    required this.replyController,
+    required this.onReply,
+  });
+
+  final VisitorInquiry inquiry;
+  final TextEditingController replyController;
+  final VoidCallback onReply;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+          title: Text(
+            inquiry.visitor,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle: Text(inquiry.message),
+        ),
+        if (inquiry.response != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 56, bottom: 8),
+            child: Text(
+              'Response: ${inquiry.response}',
+              style: const TextStyle(
+                color: Color(0xff0b4238),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          )
+        else ...[
+          _AccountField(
+            controller: replyController,
+            icon: Icons.reply_outlined,
+            label: 'Reply to visitor',
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: onReply,
+              icon: const Icon(Icons.send_outlined),
+              label: const Text('Respond'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ExhibitorSection extends StatelessWidget {
+  const _ExhibitorSection({
+    required this.icon,
+    required this.title,
+    required this.child,
+  });
+
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.white,
+        elevation: 1,
+        shadowColor: Colors.black12,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: const Color(0xffe4f4ee),
+                    child: Icon(icon, color: const Color(0xff0b4238)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _YouTab extends StatelessWidget {
   const _YouTab({
     required this.account,
@@ -1903,6 +2439,26 @@ class UserAccount {
     final first = parts.first.substring(0, 1);
     final second = parts.length > 1 ? parts.last.substring(0, 1) : '';
     return '$first$second'.toUpperCase();
+  }
+}
+
+class VisitorInquiry {
+  const VisitorInquiry({
+    required this.visitor,
+    required this.message,
+    this.response,
+  });
+
+  final String visitor;
+  final String message;
+  final String? response;
+
+  VisitorInquiry copyWith({String? response}) {
+    return VisitorInquiry(
+      visitor: visitor,
+      message: message,
+      response: response ?? this.response,
+    );
   }
 }
 
