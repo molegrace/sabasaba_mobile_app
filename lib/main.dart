@@ -568,20 +568,22 @@ class _MapCanvas extends StatelessWidget {
               child: SizedBox(
                 width: constraints.maxWidth,
                 height: constraints.maxHeight,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _MapTileLayer(data: data, tileStyle: tileStyle),
-                    CustomPaint(
-                      painter: ExhibitionMapPainter(
-                        data: data,
-                        filteredAreas: filteredAreas,
-                        selectedArea: selectedArea,
-                        selectedService: selectedService,
-                        rotation: rotation,
+                child: Transform.rotate(
+                  angle: rotation,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _MapTileLayer(data: data, tileStyle: tileStyle),
+                      CustomPaint(
+                        painter: ExhibitionMapPainter(
+                          data: data,
+                          filteredAreas: filteredAreas,
+                          selectedArea: selectedArea,
+                          selectedService: selectedService,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -610,22 +612,15 @@ class ExhibitionMapPainter extends CustomPainter {
     required this.filteredAreas,
     required this.selectedArea,
     required this.selectedService,
-    required this.rotation,
   });
 
   final ExhibitionMapData data;
   final List<MapFeature> filteredAreas;
   final MapFeature? selectedArea;
   final VisitorService? selectedService;
-  final double rotation;
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.translate(size.width / 2, size.height / 2);
-    canvas.rotate(rotation);
-    canvas.translate(-size.width / 2, -size.height / 2);
-
     final projection = data.projectionFor(size);
     final muted = filteredAreas.length != data.buildings.length;
     final filteredIds = filteredAreas.map((feature) => feature.key).toSet();
@@ -739,8 +734,6 @@ class ExhibitionMapPainter extends CustomPainter {
     if (service != null) {
       _drawServiceMarker(canvas, service, projection);
     }
-
-    canvas.restore();
   }
 
   @override
@@ -748,8 +741,7 @@ class ExhibitionMapPainter extends CustomPainter {
     return data != oldDelegate.data ||
         filteredAreas != oldDelegate.filteredAreas ||
         selectedArea != oldDelegate.selectedArea ||
-        selectedService != oldDelegate.selectedService ||
-        rotation != oldDelegate.rotation;
+        selectedService != oldDelegate.selectedService;
   }
 
   void _drawServiceMarker(
