@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -64,8 +66,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   final TransformationController _transformController =
       TransformationController();
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   late Future<ExhibitionMapData> _mapFuture;
+  bool _isOffline = false;
   String _query = '';
   bool _searchFocused = false;
   double _mapRotation = 0;
@@ -99,6 +103,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   void initState() {
     super.initState();
     _mapFuture = widget.mapData ?? ExhibitionMapData.load();
+    if (widget.mapData == null) {
+      _monitorConnectivity();
+    }
     _boothNameController.text = _boothName;
     _searchFocusNode.addListener(() {
       setState(() => _searchFocused = _searchFocusNode.hasFocus);
@@ -107,6 +114,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     _searchController.dispose();
     _authNameController.dispose();
     _authEmailController.dispose();
@@ -158,200 +166,176 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<ExhibitionMapData>(
-        future: _mapFuture,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return _MapError(message: snapshot.error.toString());
-          }
-
-          if (!snapshot.hasData) {
-            return const _LoadingMap();
-          }
-
-          final data = snapshot.data!;
-          final visibleAreas = data.searchBuildings(_query);
-          final activeArea =
-              _selectedArea != null && visibleAreas.contains(_selectedArea)
-              ? _selectedArea
-              : visibleAreas.length == 1
-              ? visibleAreas.first
-              : _selectedArea;
-          final modalArea = _selectedService == null ? _selectedArea : null;
-
-          if (_selectedNavIndex == 1) {
-            return _ServicesTab(
-              areas: data.buildings,
-              selectedService: _selectedService,
-              onSelectService: _openService,
-            );
-          }
-
-          if (_selectedNavIndex == 2) {
-            return _InfoTab(
-              buildingCount: data.buildings.length,
-              roadCount: data.roads.length,
-              treeCount: data.trees.length,
-            );
-          }
-
-          if (_selectedNavIndex == 3) {
-            return _ExhibitorTab(
-              account: _exhibitorAccount,
-              registerMode: _exhibitorRegisterMode,
-              nameController: _exhibitorNameController,
-              emailController: _exhibitorEmailController,
-              boothNameController: _boothNameController,
-              productController: _productController,
-              replyController: _replyController,
-              boothName: _boothName,
-              products: _exhibitorProducts,
-              inquiries: _visitorInquiries,
-              onToggleMode: () {
-                setState(
-                  () => _exhibitorRegisterMode = !_exhibitorRegisterMode,
-                );
-              },
-              onSubmit: () {
-                final email = _exhibitorEmailController.text.trim();
-                final fallbackName = email.isEmpty
-                    ? 'Exhibitor'
-                    : email.split('@').first;
-                setState(() {
-                  _exhibitorAccount = UserAccount(
-                    name:
-                        _exhibitorRegisterMode &&
-                            _exhibitorNameController.text.trim().isNotEmpty
-                        ? _exhibitorNameController.text.trim()
-                        : fallbackName,
-                    email: email.isEmpty ? 'exhibitor@sabasaba.local' : email,
-                  );
-                });
-              },
-              onSaveBooth: () {
-                final value = _boothNameController.text.trim();
-                if (value.isEmpty) {
-                  return;
+      body: Column(
+        children: [
+          _ConnectionBanner(isOffline: _isOffline),
+          Expanded(
+            child: FutureBuilder<ExhibitionMapData>(
+              future: _mapFuture,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return _MapError(message: snapshot.error.toString());
                 }
-                setState(() => _boothName = value);
-              },
-              onAddProduct: () {
-                final value = _productController.text.trim();
-                if (value.isEmpty) {
-                  return;
-                }
-                setState(() {
-                  _exhibitorProducts.add(value);
-                  _productController.clear();
-                });
-              },
-              onReply: (index) {
-                final reply = _replyController.text.trim();
-                if (reply.isEmpty) {
-                  return;
-                }
-                setState(() {
-                  _visitorInquiries[index] = _visitorInquiries[index].copyWith(
-                    response: reply,
-                  );
-                  _replyController.clear();
-                });
-              },
-              onLogout: () {
-                setState(() => _exhibitorAccount = null);
-              },
-            );
-          }
 
-          if (_selectedNavIndex == 4) {
-            return _YouTab(
-              account: _account,
-              registerMode: _registerMode,
-              nameController: _authNameController,
-              emailController: _authEmailController,
-              passwordController: _authPasswordController,
-              onToggleMode: () {
-                setState(() => _registerMode = !_registerMode);
-              },
-              onSubmit: () {
-                final email = _authEmailController.text.trim();
-                final fallbackName = email.isEmpty
-                    ? 'Visitor'
-                    : email.split('@').first;
-                setState(() {
-                  _account = UserAccount(
-                    name:
-                        _registerMode &&
-                            _authNameController.text.trim().isNotEmpty
-                        ? _authNameController.text.trim()
-                        : fallbackName,
-                    email: email.isEmpty ? 'visitor@sabasaba.local' : email,
-                  );
-                  _authPasswordController.clear();
-                });
-              },
-              onLogout: () {
-                setState(() => _account = null);
-              },
-            );
-          }
+                if (!snapshot.hasData) {
+                  return const _LoadingMap();
+                }
 
-          return SafeArea(
-            bottom: false,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 760;
-                final searchShowingResults =
-                    _searchFocused && _query.trim().isNotEmpty;
-                final panel = _SearchPanel(
-                  query: _query,
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  areas: visibleAreas,
-                  selectedArea: activeArea,
-                  showResults: searchShowingResults,
-                  onQueryChanged: (value) {
-                    setState(() {
-                      _query = value;
+                final data = snapshot.data!;
+                final visibleAreas = data.searchBuildings(_query);
+                final activeArea =
+                    _selectedArea != null &&
+                        visibleAreas.contains(_selectedArea)
+                    ? _selectedArea
+                    : visibleAreas.length == 1
+                    ? visibleAreas.first
+                    : _selectedArea;
+                final modalArea = _selectedService == null
+                    ? _selectedArea
+                    : null;
+
+                if (_selectedNavIndex == 1) {
+                  return _ServicesTab(
+                    areas: data.buildings,
+                    selectedService: _selectedService,
+                    onSelectService: _openService,
+                  );
+                }
+
+                if (_selectedNavIndex == 2) {
+                  return _InfoTab(
+                    buildingCount: data.buildings.length,
+                    roadCount: data.roads.length,
+                    treeCount: data.trees.length,
+                  );
+                }
+
+                if (_selectedNavIndex == 3) {
+                  return _ExhibitorTab(
+                    account: _exhibitorAccount,
+                    registerMode: _exhibitorRegisterMode,
+                    nameController: _exhibitorNameController,
+                    emailController: _exhibitorEmailController,
+                    boothNameController: _boothNameController,
+                    productController: _productController,
+                    replyController: _replyController,
+                    boothName: _boothName,
+                    products: _exhibitorProducts,
+                    inquiries: _visitorInquiries,
+                    onToggleMode: () {
+                      setState(
+                        () => _exhibitorRegisterMode = !_exhibitorRegisterMode,
+                      );
+                    },
+                    onSubmit: () {
+                      final email = _exhibitorEmailController.text.trim();
+                      final fallbackName = email.isEmpty
+                          ? 'Exhibitor'
+                          : email.split('@').first;
+                      setState(() {
+                        _exhibitorAccount = UserAccount(
+                          name:
+                              _exhibitorRegisterMode &&
+                                  _exhibitorNameController.text
+                                      .trim()
+                                      .isNotEmpty
+                              ? _exhibitorNameController.text.trim()
+                              : fallbackName,
+                          email: email.isEmpty
+                              ? 'exhibitor@sabasaba.local'
+                              : email,
+                        );
+                      });
+                    },
+                    onSaveBooth: () {
+                      final value = _boothNameController.text.trim();
                       if (value.isEmpty) {
-                        _selectedArea = null;
+                        return;
                       }
-                    });
-                  },
-                  onSelectArea: (area) {
-                    setState(() {
-                      _selectedArea = area;
-                      _selectedService = null;
-                    });
-                    _searchFocusNode.unfocus();
-                  },
-                  onClear: () {
-                    _searchController.clear();
-                    setState(() {
-                      _query = '';
-                      _selectedArea = null;
-                      _selectedService = null;
-                    });
-                  },
-                );
+                      setState(() => _boothName = value);
+                    },
+                    onAddProduct: () {
+                      final value = _productController.text.trim();
+                      if (value.isEmpty) {
+                        return;
+                      }
+                      setState(() {
+                        _exhibitorProducts.add(value);
+                        _productController.clear();
+                      });
+                    },
+                    onReply: (index) {
+                      final reply = _replyController.text.trim();
+                      if (reply.isEmpty) {
+                        return;
+                      }
+                      setState(() {
+                        _visitorInquiries[index] = _visitorInquiries[index]
+                            .copyWith(response: reply);
+                        _replyController.clear();
+                      });
+                    },
+                    onLogout: () {
+                      setState(() => _exhibitorAccount = null);
+                    },
+                  );
+                }
 
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: _MapCanvas(
-                        data: data,
-                        filteredAreas: visibleAreas,
+                if (_selectedNavIndex == 4) {
+                  return _YouTab(
+                    account: _account,
+                    registerMode: _registerMode,
+                    nameController: _authNameController,
+                    emailController: _authEmailController,
+                    passwordController: _authPasswordController,
+                    onToggleMode: () {
+                      setState(() => _registerMode = !_registerMode);
+                    },
+                    onSubmit: () {
+                      final email = _authEmailController.text.trim();
+                      final fallbackName = email.isEmpty
+                          ? 'Visitor'
+                          : email.split('@').first;
+                      setState(() {
+                        _account = UserAccount(
+                          name:
+                              _registerMode &&
+                                  _authNameController.text.trim().isNotEmpty
+                              ? _authNameController.text.trim()
+                              : fallbackName,
+                          email: email.isEmpty
+                              ? 'visitor@sabasaba.local'
+                              : email,
+                        );
+                        _authPasswordController.clear();
+                      });
+                    },
+                    onLogout: () {
+                      setState(() => _account = null);
+                    },
+                  );
+                }
+
+                return SafeArea(
+                  bottom: false,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final wide = constraints.maxWidth >= 760;
+                      final searchShowingResults =
+                          _searchFocused && _query.trim().isNotEmpty;
+                      final panel = _SearchPanel(
+                        query: _query,
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        areas: visibleAreas,
                         selectedArea: activeArea,
-                        selectedService: _selectedService,
-                        tileStyle: _tileStyle,
-                        rotation: _mapRotation,
-                        controller: _transformController,
-                        onRotationStart: () {
-                          _gestureRotationStart = _mapRotation;
-                        },
-                        onRotationUpdate: (angle) {
+                        showResults: searchShowingResults,
+                        onQueryChanged: (value) {
                           setState(() {
-                            _mapRotation = _gestureRotationStart + angle;
+                            _query = value;
+                            if (value.isEmpty) {
+                              _selectedArea = null;
+                            }
                           });
                         },
                         onSelectArea: (area) {
@@ -361,105 +345,168 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                           });
                           _searchFocusNode.unfocus();
                         },
-                      ),
-                    ),
-                    if (modalArea != null)
-                      Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: () {
-                            setState(() => _selectedArea = null);
-                          },
-                        ),
-                      ),
-                    Positioned(
-                      left: 16,
-                      right: wide ? null : 16,
-                      top: 14,
-                      width: wide ? 350 : null,
-                      bottom: wide ? 18 : null,
-                      child: panel,
-                    ),
-                    if (modalArea != null && !wide)
-                      Positioned(
-                        left: 16,
-                        right: 16,
-                        bottom: 14,
-                        child: _SelectedAreaModal(
-                          area: modalArea,
-                          onClose: () {
-                            setState(() => _selectedArea = null);
-                          },
-                        ),
-                      ),
-                    if (modalArea != null && wide)
-                      Positioned(
-                        right: 18,
-                        bottom: 18,
-                        width: 310,
-                        child: _SelectedAreaModal(
-                          area: modalArea,
-                          onClose: () {
-                            setState(() => _selectedArea = null);
-                          },
-                        ),
-                      ),
-                    if (_selectedService != null && !wide)
-                      Positioned(
-                        left: 16,
-                        right: 16,
-                        bottom: 14,
-                        child: _SelectedServiceNavigationCard(
-                          service: _selectedService!,
-                          onClose: () {
-                            setState(() => _selectedService = null);
-                          },
-                        ),
-                      ),
-                    if (_selectedService != null && wide)
-                      Positioned(
-                        right: 18,
-                        bottom: 18,
-                        width: 310,
-                        child: _SelectedServiceNavigationCard(
-                          service: _selectedService!,
-                          onClose: () {
-                            setState(() => _selectedService = null);
-                          },
-                        ),
-                      ),
-                    if (wide || !searchShowingResults)
-                      Positioned(
-                        right: 16,
-                        top: wide ? 14 : 98,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _MapControls(
+                        onClear: () {
+                          _searchController.clear();
+                          setState(() {
+                            _query = '';
+                            _selectedArea = null;
+                            _selectedService = null;
+                          });
+                        },
+                      );
+
+                      return Stack(
+                        children: [
+                          Positioned.fill(
+                            child: _MapCanvas(
+                              data: data,
+                              filteredAreas: visibleAreas,
+                              selectedArea: activeArea,
+                              selectedService: _selectedService,
                               tileStyle: _tileStyle,
-                              onTileStyleChanged: (style) {
-                                setState(() => _tileStyle = style);
+                              rotation: _mapRotation,
+                              controller: _transformController,
+                              onRotationStart: () {
+                                _gestureRotationStart = _mapRotation;
                               },
-                              onZoomIn: () => _zoom(1.22),
-                              onZoomOut: () => _zoom(0.82),
-                              onReset: () {
-                                _transformController.value = Matrix4.identity();
-                                setState(() => _mapRotation = 0);
+                              onRotationUpdate: (angle) {
+                                setState(() {
+                                  _mapRotation = _gestureRotationStart + angle;
+                                });
+                              },
+                              onSelectArea: (area) {
+                                setState(() {
+                                  _selectedArea = area;
+                                  _selectedService = null;
+                                });
+                                _searchFocusNode.unfocus();
                               },
                             ),
-                            const SizedBox(height: 12),
-                            _CompassControl(rotation: _mapRotation),
-                          ],
-                        ),
-                      ),
-                  ],
+                          ),
+                          if (modalArea != null)
+                            Positioned.fill(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onTap: () {
+                                  setState(() => _selectedArea = null);
+                                },
+                              ),
+                            ),
+                          Positioned(
+                            left: 16,
+                            right: wide ? null : 16,
+                            top: 14,
+                            width: wide ? 350 : null,
+                            bottom: wide ? 18 : null,
+                            child: panel,
+                          ),
+                          if (modalArea != null && !wide)
+                            Positioned(
+                              left: 16,
+                              right: 16,
+                              bottom: 14,
+                              child: _SelectedAreaModal(
+                                area: modalArea,
+                                onClose: () {
+                                  setState(() => _selectedArea = null);
+                                },
+                              ),
+                            ),
+                          if (modalArea != null && wide)
+                            Positioned(
+                              right: 18,
+                              bottom: 18,
+                              width: 310,
+                              child: _SelectedAreaModal(
+                                area: modalArea,
+                                onClose: () {
+                                  setState(() => _selectedArea = null);
+                                },
+                              ),
+                            ),
+                          if (_selectedService != null && !wide)
+                            Positioned(
+                              left: 16,
+                              right: 16,
+                              bottom: 14,
+                              child: _SelectedServiceNavigationCard(
+                                service: _selectedService!,
+                                onClose: () {
+                                  setState(() => _selectedService = null);
+                                },
+                              ),
+                            ),
+                          if (_selectedService != null && wide)
+                            Positioned(
+                              right: 18,
+                              bottom: 18,
+                              width: 310,
+                              child: _SelectedServiceNavigationCard(
+                                service: _selectedService!,
+                                onClose: () {
+                                  setState(() => _selectedService = null);
+                                },
+                              ),
+                            ),
+                          if (wide || !searchShowingResults)
+                            Positioned(
+                              right: 16,
+                              top: wide ? 14 : 98,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _MapControls(
+                                    tileStyle: _tileStyle,
+                                    onTileStyleChanged: (style) {
+                                      setState(() => _tileStyle = style);
+                                    },
+                                    onZoomIn: () => _zoom(1.22),
+                                    onZoomOut: () => _zoom(0.82),
+                                    onReset: () {
+                                      _transformController.value =
+                                          Matrix4.identity();
+                                      setState(() => _mapRotation = 0);
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _CompassControl(rotation: _mapRotation),
+                                ],
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                 );
               },
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _monitorConnectivity() async {
+    final connectivity = Connectivity();
+    _connectivitySubscription = connectivity.onConnectivityChanged.listen(
+      _updateConnectivity,
+    );
+    _updateConnectivity(await connectivity.checkConnectivity());
+  }
+
+  void _updateConnectivity(List<ConnectivityResult> results) {
+    if (!mounted) {
+      return;
+    }
+    final isOffline =
+        results.isEmpty || results.contains(ConnectivityResult.none);
+    final reconnected = _isOffline && !isOffline;
+    setState(() {
+      _isOffline = isOffline;
+      if (reconnected) {
+        _mapFuture = ExhibitionMapData.load();
+      }
+    });
   }
 
   void _zoom(double factor) {
@@ -2274,6 +2321,50 @@ class _LoadingMap extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Center(
       child: SizedBox.square(dimension: 46, child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _ConnectionBanner extends StatelessWidget {
+  const _ConnectionBanner({required this.isOffline});
+
+  final bool isOffline;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = isOffline
+        ? const Color(0xffffe0b2)
+        : const Color(0xffd7f3e8);
+    final foreground = isOffline
+        ? const Color(0xff8a4200)
+        : const Color(0xff075e4a);
+
+    return SafeArea(
+      bottom: false,
+      child: Container(
+        width: double.infinity,
+        color: background,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isOffline ? Icons.cloud_off_outlined : Icons.cloud_done_outlined,
+              size: 17,
+              color: foreground,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              isOffline ? 'Offline — no internet connection' : 'Online',
+              style: TextStyle(
+                color: foreground,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
