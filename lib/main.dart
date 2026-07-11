@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
 const double _minMapScale = 0.7;
 const double _maxMapScale = 6;
@@ -12,7 +12,9 @@ void main() {
 }
 
 class SabaSabaApp extends StatelessWidget {
-  const SabaSabaApp({super.key});
+  const SabaSabaApp({super.key, this.mapData});
+
+  final Future<ExhibitionMapData>? mapData;
 
   @override
   Widget build(BuildContext context) {
@@ -33,13 +35,15 @@ class SabaSabaApp extends StatelessWidget {
           titleMedium: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-      home: const ExhibitionMapScreen(),
+      home: ExhibitionMapScreen(mapData: mapData),
     );
   }
 }
 
 class ExhibitionMapScreen extends StatefulWidget {
-  const ExhibitionMapScreen({super.key});
+  const ExhibitionMapScreen({super.key, this.mapData});
+
+  final Future<ExhibitionMapData>? mapData;
 
   @override
   State<ExhibitionMapScreen> createState() => _ExhibitionMapScreenState();
@@ -94,7 +98,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   @override
   void initState() {
     super.initState();
-    _mapFuture = ExhibitionMapData.load();
+    _mapFuture = widget.mapData ?? ExhibitionMapData.load();
     _boothNameController.text = _boothName;
     _searchFocusNode.addListener(() {
       setState(() => _searchFocused = _searchFocusNode.hasFocus);
@@ -169,10 +173,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
           final visibleAreas = data.searchBuildings(_query);
           final activeArea =
               _selectedArea != null && visibleAreas.contains(_selectedArea)
-                  ? _selectedArea
-                  : visibleAreas.length == 1
-                      ? visibleAreas.first
-                      : _selectedArea;
+              ? _selectedArea
+              : visibleAreas.length == 1
+              ? visibleAreas.first
+              : _selectedArea;
           final modalArea = _selectedService == null ? _selectedArea : null;
 
           if (_selectedNavIndex == 1) {
@@ -204,15 +208,19 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
               products: _exhibitorProducts,
               inquiries: _visitorInquiries,
               onToggleMode: () {
-                setState(() => _exhibitorRegisterMode = !_exhibitorRegisterMode);
+                setState(
+                  () => _exhibitorRegisterMode = !_exhibitorRegisterMode,
+                );
               },
               onSubmit: () {
                 final email = _exhibitorEmailController.text.trim();
-                final fallbackName =
-                    email.isEmpty ? 'Exhibitor' : email.split('@').first;
+                final fallbackName = email.isEmpty
+                    ? 'Exhibitor'
+                    : email.split('@').first;
                 setState(() {
                   _exhibitorAccount = UserAccount(
-                    name: _exhibitorRegisterMode &&
+                    name:
+                        _exhibitorRegisterMode &&
                             _exhibitorNameController.text.trim().isNotEmpty
                         ? _exhibitorNameController.text.trim()
                         : fallbackName,
@@ -243,8 +251,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                   return;
                 }
                 setState(() {
-                  _visitorInquiries[index] =
-                      _visitorInquiries[index].copyWith(response: reply);
+                  _visitorInquiries[index] = _visitorInquiries[index].copyWith(
+                    response: reply,
+                  );
                   _replyController.clear();
                 });
               },
@@ -266,10 +275,14 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
               },
               onSubmit: () {
                 final email = _authEmailController.text.trim();
-                final fallbackName = email.isEmpty ? 'Visitor' : email.split('@').first;
+                final fallbackName = email.isEmpty
+                    ? 'Visitor'
+                    : email.split('@').first;
                 setState(() {
                   _account = UserAccount(
-                    name: _registerMode && _authNameController.text.trim().isNotEmpty
+                    name:
+                        _registerMode &&
+                            _authNameController.text.trim().isNotEmpty
                         ? _authNameController.text.trim()
                         : fallbackName,
                     email: email.isEmpty ? 'visitor@sabasaba.local' : email,
@@ -430,8 +443,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                               onZoomIn: () => _zoom(1.22),
                               onZoomOut: () => _zoom(0.82),
                               onReset: () {
-                                _transformController.value =
-                                    Matrix4.identity();
+                                _transformController.value = Matrix4.identity();
                                 setState(() => _mapRotation = 0);
                               },
                             ),
@@ -453,19 +465,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   void _zoom(double factor) {
     final current = _transformController.value;
     final currentScale = current.getMaxScaleOnAxis();
-    final nextScale = (currentScale * factor).clamp(
-      _minMapScale,
-      _maxMapScale,
-    );
+    final nextScale = (currentScale * factor).clamp(_minMapScale, _maxMapScale);
     if (currentScale == nextScale) {
       return;
     }
 
     final adjustedFactor = nextScale / currentScale;
-    _transformController.value = current.scaled(
-      adjustedFactor,
-      adjustedFactor,
-    );
+    _transformController.value = current.scaled(adjustedFactor, adjustedFactor);
   }
 
   Future<void> _openService(VisitorService service) async {
@@ -539,9 +545,7 @@ class _MapCanvas extends StatelessWidget {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
 
         return DecoratedBox(
-          decoration: const BoxDecoration(
-            color: Color(0xffdfe7dc),
-          ),
+          decoration: const BoxDecoration(color: Color(0xffdfe7dc)),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapUp: (details) {
@@ -561,7 +565,8 @@ class _MapCanvas extends StatelessWidget {
               boundaryMargin: const EdgeInsets.all(36),
               onInteractionStart: (_) => onRotationStart(),
               onInteractionUpdate: (details) {
-                if (details.pointerCount > 1 && details.rotation.abs() > 0.002) {
+                if (details.pointerCount > 1 &&
+                    details.rotation.abs() > 0.002) {
                   onRotationUpdate(details.rotation);
                 }
               },
@@ -688,10 +693,10 @@ class ExhibitionMapPainter extends CustomPainter {
         ..color = isSelected
             ? const Color(0xfff26430)
             : isFiltered
-                ? const Color(0xff1aa987)
-                : muted
-                    ? const Color(0xff8bb8aa)
-                    : const Color(0xff50b89d);
+            ? const Color(0xff1aa987)
+            : muted
+            ? const Color(0xff8bb8aa)
+            : const Color(0xff50b89d);
 
       for (final polygon in building.polygons) {
         final path = _polygonPath(polygon, projection);
@@ -705,7 +710,9 @@ class ExhibitionMapPainter extends CustomPainter {
       final stroke = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = isSelected ? 3.2 : 1.3
-        ..color = isSelected ? const Color(0xff70210d) : const Color(0xcc124e43);
+        ..color = isSelected
+            ? const Color(0xff70210d)
+            : const Color(0xcc124e43);
 
       for (final polygon in building.polygons) {
         canvas.drawPath(_polygonPath(polygon, projection), stroke);
@@ -786,10 +793,7 @@ class ExhibitionMapPainter extends CustomPainter {
       const Radius.circular(8),
     );
     canvas.drawRRect(labelRect, labelPaint);
-    textPainter.paint(
-      canvas,
-      Offset(labelRect.left + 10, labelRect.top + 5),
-    );
+    textPainter.paint(canvas, Offset(labelRect.left + 10, labelRect.top + 5));
   }
 
   void _drawLabel(
@@ -822,13 +826,7 @@ class ExhibitionMapPainter extends CustomPainter {
       rect,
       Paint()..color = selected ? const Color(0xff0b4238) : Colors.white,
     );
-    textPainter.paint(
-      canvas,
-      Offset(
-        rect.left + 8,
-        rect.top + 4,
-      ),
-    );
+    textPainter.paint(canvas, Offset(rect.left + 8, rect.top + 4));
   }
 
   void _drawRoundabouts(Canvas canvas, MapProjection projection) {
@@ -888,10 +886,7 @@ class ExhibitionMapPainter extends CustomPainter {
 }
 
 class _MapTileLayer extends StatelessWidget {
-  const _MapTileLayer({
-    required this.data,
-    required this.tileStyle,
-  });
+  const _MapTileLayer({required this.data, required this.tileStyle});
 
   final ExhibitionMapData data;
   final MapTileStyle tileStyle;
@@ -941,12 +936,7 @@ class _MapTileLayer extends StatelessWidget {
     );
   }
 
-  Rect _tileRect(
-    int x,
-    int y,
-    int zoom,
-    MapProjection projection,
-  ) {
+  Rect _tileRect(int x, int y, int zoom, MapProjection projection) {
     final northWest = _tileToPoint(x, y, zoom);
     final southEast = _tileToPoint(x + 1, y + 1, zoom);
     return Rect.fromPoints(
@@ -959,8 +949,7 @@ class _MapTileLayer extends StatelessWidget {
     final scale = math.pow(2, zoom).toDouble();
     final lng = x / scale * 360 - 180;
     final mercator = math.pi * (1 - 2 * y / scale);
-    final sinhMercator =
-        (math.exp(mercator) - math.exp(-mercator)) / 2;
+    final sinhMercator = (math.exp(mercator) - math.exp(-mercator)) / 2;
     final lat = math.atan(sinhMercator) * 180 / math.pi;
     return GeoPoint(lng, lat);
   }
@@ -1094,7 +1083,10 @@ class _SearchPanel extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 420),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 child: areas.isEmpty
                     ? const _EmptyResults()
                     : ListView.separated(
@@ -1151,10 +1143,7 @@ class _SearchPanel extends StatelessWidget {
 }
 
 class _SelectedAreaModal extends StatelessWidget {
-  const _SelectedAreaModal({
-    required this.area,
-    required this.onClose,
-  });
+  const _SelectedAreaModal({required this.area, required this.onClose});
 
   final MapFeature area;
   final VoidCallback onClose;
@@ -1308,9 +1297,9 @@ class _ServicesTab extends StatelessWidget {
           Text(
             'Services',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xff0b4238),
-                ),
+              fontWeight: FontWeight.w900,
+              color: const Color(0xff0b4238),
+            ),
           ),
           const SizedBox(height: 6),
           const Text(
@@ -1397,9 +1386,9 @@ class _InfoTab extends StatelessWidget {
           Text(
             'SabaSaba Exhibition',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xff0b4238),
-                ),
+              fontWeight: FontWeight.w900,
+              color: const Color(0xff0b4238),
+            ),
           ),
           const SizedBox(height: 6),
           const Text(
@@ -1425,7 +1414,10 @@ class _InfoTab extends StatelessWidget {
           const SizedBox(height: 10),
           const _LegendRow(color: Color(0xff1aa987), label: 'Exhibition area'),
           const _LegendRow(color: Color(0xfff26430), label: 'Selected area'),
-          const _LegendRow(color: Color(0xffd89b48), label: 'Road and boundary'),
+          const _LegendRow(
+            color: Color(0xffd89b48),
+            label: 'Road and boundary',
+          ),
         ],
       ),
     );
@@ -1480,9 +1472,9 @@ class _ExhibitorTab extends StatelessWidget {
           Text(
             'Exhibitor',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xff0b4238),
-                ),
+              fontWeight: FontWeight.w900,
+              color: const Color(0xff0b4238),
+            ),
           ),
           const SizedBox(height: 6),
           const Text(
@@ -1590,10 +1582,7 @@ class _ExhibitorLoginCard extends StatelessWidget {
 }
 
 class _ExhibitorHeader extends StatelessWidget {
-  const _ExhibitorHeader({
-    required this.account,
-    required this.onLogout,
-  });
+  const _ExhibitorHeader({required this.account, required this.onLogout});
 
   final UserAccount account;
   final VoidCallback onLogout;
@@ -1902,9 +1891,9 @@ class _YouTab extends StatelessWidget {
           Text(
             'You',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xff0b4238),
-                ),
+              fontWeight: FontWeight.w900,
+              color: const Color(0xff0b4238),
+            ),
           ),
           const SizedBox(height: 14),
           if (currentAccount == null)
@@ -2001,10 +1990,7 @@ class _AuthCard extends StatelessWidget {
 }
 
 class _AccountCard extends StatelessWidget {
-  const _AccountCard({
-    required this.account,
-    required this.onLogout,
-  });
+  const _AccountCard({required this.account, required this.onLogout});
 
   final UserAccount account;
   final VoidCallback onLogout;
@@ -2137,7 +2123,10 @@ class _InfoTile extends StatelessWidget {
             backgroundColor: const Color(0xffe4f4ee),
             child: Icon(icon, color: const Color(0xff0b4238)),
           ),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
           subtitle: Text(subtitle),
         ),
       ),
@@ -2268,11 +2257,7 @@ class _CompassControl extends StatelessWidget {
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                Icon(
-                  Icons.navigation,
-                  color: Color(0xdd0b4238),
-                  size: 25,
-                ),
+                Icon(Icons.navigation, color: Color(0xdd0b4238), size: 25),
               ],
             ),
           ),
@@ -2288,10 +2273,7 @@ class _LoadingMap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: SizedBox.square(
-        dimension: 46,
-        child: CircularProgressIndicator(),
-      ),
+      child: SizedBox.square(dimension: 46, child: CircularProgressIndicator()),
     );
   }
 }
@@ -2333,6 +2315,10 @@ class _EmptyResults extends StatelessWidget {
 }
 
 class ExhibitionMapData {
+  static final Uri _mapEndpoint = Uri.parse(
+    'https://77.alphabeti.co.tz/api/map',
+  );
+
   ExhibitionMapData({
     required this.buildings,
     required this.roads,
@@ -2348,14 +2334,35 @@ class ExhibitionMapData {
   final GeoBounds bounds;
 
   static Future<ExhibitionMapData> load() async {
-    final buildings = await _loadFeatures('data/majengo.geojson', Layer.building);
-    final roads = await _loadFeatures('data/barabara.geojson', Layer.road);
-    final trees = await _loadFeatures('data/miti.geojson', Layer.tree);
-    final boundaries = await _loadFeatures('data/mpaka.geojson', Layer.boundary);
+    final response = await http.get(
+      _mapEndpoint,
+      headers: const {'accept': 'application/json'},
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Map API returned ${response.statusCode} ${response.reasonPhrase ?? ''}'
+            .trim(),
+      );
+    }
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = payload['data'] as Map<String, dynamic>?;
+    final layers = data?['layers'] as List<dynamic>?;
+    if (layers == null) {
+      throw const FormatException('Map API response does not contain layers.');
+    }
+
+    final buildings = _loadFeatures(layers, 'buildings', Layer.building);
+    final roads = _loadFeatures(layers, 'roads', Layer.road);
+    final trees = _loadFeatures(layers, 'trees', Layer.tree);
+    final boundaries = _loadFeatures(layers, 'boundary', Layer.boundary);
     final allPoints = [
       for (final feature in [...buildings, ...roads, ...trees, ...boundaries])
         ...feature.allPoints,
     ];
+    if (allPoints.isEmpty) {
+      throw const FormatException('Map API returned no renderable geometry.');
+    }
 
     return ExhibitionMapData(
       buildings: buildings,
@@ -2366,10 +2373,20 @@ class ExhibitionMapData {
     );
   }
 
-  static Future<List<MapFeature>> _loadFeatures(String path, Layer layer) async {
-    final raw = await rootBundle.loadString(path);
-    final json = jsonDecode(raw) as Map<String, dynamic>;
-    final features = json['features'] as List<dynamic>;
+  static List<MapFeature> _loadFeatures(
+    List<dynamic> layers,
+    String layerId,
+    Layer layer,
+  ) {
+    final layerJson = layers.cast<Map<String, dynamic>?>().firstWhere(
+      (item) => item?['id'] == layerId,
+      orElse: () => null,
+    );
+    final geoJson = layerJson?['geojson'] as Map<String, dynamic>?;
+    final features = geoJson?['features'] as List<dynamic>?;
+    if (features == null) {
+      throw FormatException('Map API layer $layerId is missing GeoJSON.');
+    }
 
     return [
       for (var i = 0; i < features.length; i++)
@@ -2415,10 +2432,7 @@ class ExhibitionMapData {
 }
 
 class UserAccount {
-  const UserAccount({
-    required this.name,
-    required this.email,
-  });
+  const UserAccount({required this.name, required this.email});
 
   final String name;
   final String email;
@@ -2528,10 +2542,10 @@ class MapFeature {
 
   GeoPoint get center {
     final items = allPoints.toList();
-    final lng = items.map((point) => point.lng).reduce((a, b) => a + b) /
-        items.length;
-    final lat = items.map((point) => point.lat).reduce((a, b) => a + b) /
-        items.length;
+    final lng =
+        items.map((point) => point.lng).reduce((a, b) => a + b) / items.length;
+    final lat =
+        items.map((point) => point.lat).reduce((a, b) => a + b) / items.length;
     return GeoPoint(lng, lat);
   }
 
@@ -2579,10 +2593,7 @@ class MapFeature {
   }
 
   static GeoPoint _parsePoint(List<dynamic> value) {
-    return GeoPoint(
-      (value[0] as num).toDouble(),
-      (value[1] as num).toDouble(),
-    );
+    return GeoPoint((value[0] as num).toDouble(), (value[1] as num).toDouble());
   }
 }
 
@@ -2667,8 +2678,10 @@ class VisitorService {
   }
 
   static MapFeature _areaAt(List<MapFeature> areas, double fraction) {
-    final index =
-        (areas.length * fraction).floor().clamp(0, areas.length - 1).toInt();
+    final index = (areas.length * fraction)
+        .floor()
+        .clamp(0, areas.length - 1)
+        .toInt();
     return areas[index];
   }
 }
@@ -2816,7 +2829,10 @@ class MapProjection {
     final availableHeight = math.max(1.0, size.height - padding * 2);
     final lngRange = math.max(0.000001, bounds.maxLng - bounds.minLng);
     final latRange = math.max(0.000001, bounds.maxLat - bounds.minLat);
-    final scale = math.min(availableWidth / lngRange, availableHeight / latRange);
+    final scale = math.min(
+      availableWidth / lngRange,
+      availableHeight / latRange,
+    );
     final mapWidth = lngRange * scale;
     final mapHeight = latRange * scale;
     final left = (size.width - mapWidth) / 2;
