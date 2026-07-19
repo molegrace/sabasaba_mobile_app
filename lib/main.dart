@@ -98,6 +98,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   ];
   MapFeature? _selectedArea;
   VisitorService? _selectedService;
+  bool _routingMode = false;
+  bool _routeMinimized = false;
+  String _startLocationId = '';
+  String _endLocationId = '';
+  RouteResult? _currentRoute;
+  String? _routeNotice;
 
   @override
   void initState() {
@@ -375,15 +381,24 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                                 });
                               },
                               onSelectArea: (area) {
-                                setState(() {
-                                  _selectedArea = area;
-                                  _selectedService = null;
-                                });
-                                _searchFocusNode.unfocus();
+                                if (!_routingMode) {
+                                  setState(() {
+                                    _selectedArea = area;
+                                    _selectedService = null;
+                                  });
+                                  _searchFocusNode.unfocus();
+                                }
                               },
+                              route: _currentRoute,
+                              startPoint: _currentRoute == null || _startLocationId.isEmpty
+                                  ? null
+                                  : data.locations.firstWhere((loc) => loc.id == _startLocationId, orElse: () => data.locations.first).position,
+                              endPoint: _currentRoute == null || _endLocationId.isEmpty
+                                  ? null
+                                  : data.locations.firstWhere((loc) => loc.id == _endLocationId, orElse: () => data.locations.first).position,
                             ),
                           ),
-                          if (modalArea != null)
+                          if (modalArea != null && !_routingMode)
                             Positioned.fill(
                               child: GestureDetector(
                                 behavior: HitTestBehavior.translucent,
@@ -397,10 +412,50 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                             right: wide ? null : 16,
                             top: 14,
                             width: wide ? 350 : null,
-                            bottom: wide ? 18 : null,
-                            child: panel,
+                            child: _routingMode
+                                ? (_routeMinimized
+                                    ? _MinimizedRouteHeader(
+                                        startLabel: data.locations.firstWhere((loc) => loc.id == _startLocationId, orElse: () => data.locations.first).label,
+                                        endLabel: data.locations.firstWhere((loc) => loc.id == _endLocationId, orElse: () => data.locations.first).label,
+                                        distance: _currentRoute?.distance ?? 0.0,
+                                        onEdit: () {
+                                          setState(() => _routeMinimized = false);
+                                        },
+                                        onClose: () {
+                                          _clearRoute();
+                                        },
+                                      )
+                                    : _RouteInputPanel(
+                                        locations: data.locations,
+                                        startId: _startLocationId,
+                                        endId: _endLocationId,
+                                        notice: _routeNotice,
+                                        onStartChanged: (id) {
+                                          setState(() {
+                                            _startLocationId = id;
+                                            _currentRoute = null;
+                                            _routeMinimized = false;
+                                          });
+                                        },
+                                        onEndChanged: (id) {
+                                          setState(() {
+                                            _endLocationId = id;
+                                            _currentRoute = null;
+                                            _routeMinimized = false;
+                                          });
+                                        },
+                                        onFindRoute: () => _calculateRoute(data),
+                                        onSwap: _swapLocations,
+                                        onBack: () {
+                                          setState(() {
+                                            _routingMode = false;
+                                            _clearRoute();
+                                          });
+                                        },
+                                      ))
+                                : panel,
                           ),
-                          if (modalArea != null && !wide)
+                          if (modalArea != null && !wide && !_routingMode)
                             Positioned(
                               left: 16,
                               right: 16,
@@ -412,7 +467,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                                 },
                               ),
                             ),
-                          if (modalArea != null && wide)
+                          if (modalArea != null && wide && !_routingMode)
                             Positioned(
                               right: 18,
                               bottom: 18,
@@ -424,7 +479,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                                 },
                               ),
                             ),
-                          if (_selectedService != null && !wide)
+                          if (_selectedService != null && !wide && !_routingMode)
                             Positioned(
                               left: 16,
                               right: 16,
@@ -436,7 +491,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                                 },
                               ),
                             ),
-                          if (_selectedService != null && wide)
+                          if (_selectedService != null && wide && !_routingMode)
                             Positioned(
                               right: 18,
                               bottom: 18,
@@ -449,9 +504,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                               ),
                             ),
                           if (wide || !searchShowingResults)
-                            Positioned(
+                            AnimatedPositioned(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
                               right: 16,
-                              top: wide ? 14 : 98,
+                              top: wide
+                                  ? 14
+                                  : (_routingMode && !_routeMinimized ? 260.0 : 98.0),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -470,6 +529,21 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                                   ),
                                   const SizedBox(height: 12),
                                   _CompassControl(rotation: _mapRotation),
+                                  if (!_routingMode) ...[
+                                    const SizedBox(height: 12),
+                                    FloatingActionButton(
+                                      mini: true,
+                                      backgroundColor: const Color(0xff0b4238),
+                                      foregroundColor: Colors.white,
+                                      onPressed: () {
+                                        setState(() {
+                                          _routingMode = true;
+                                          _routeMinimized = false;
+                                        });
+                                      },
+                                      child: const Icon(Icons.directions),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -558,6 +632,53 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
     });
     _searchFocusNode.unfocus();
   }
+
+  void _clearRoute() {
+    setState(() {
+      _startLocationId = '';
+      _endLocationId = '';
+      _currentRoute = null;
+      _routeNotice = null;
+      _routeMinimized = false;
+    });
+  }
+
+  void _swapLocations() {
+    setState(() {
+      final temp = _startLocationId;
+      _startLocationId = _endLocationId;
+      _endLocationId = temp;
+      if (_currentRoute != null) {
+        _currentRoute = null;
+        _routeMinimized = false;
+      }
+    });
+  }
+
+  void _calculateRoute(ExhibitionMapData data) {
+    setState(() => _routeNotice = null);
+    if (_startLocationId.isEmpty || _endLocationId.isEmpty) {
+      setState(() => _routeNotice = 'Please select both start and end locations.');
+      return;
+    }
+    if (_startLocationId == _endLocationId) {
+      setState(() => _routeNotice = 'Start and end locations must be different.');
+      return;
+    }
+
+    final start = data.locations.firstWhere((loc) => loc.id == _startLocationId);
+    final end = data.locations.firstWhere((loc) => loc.id == _endLocationId);
+    final result = shortestPath(start.nodeId, end.nodeId, data.edges);
+    if (result == null) {
+      setState(() => _routeNotice = 'No path was found between these locations.');
+      return;
+    }
+
+    setState(() {
+      _currentRoute = result;
+      _routeMinimized = true;
+    });
+  }
 }
 
 class _MapCanvas extends StatelessWidget {
@@ -572,6 +693,9 @@ class _MapCanvas extends StatelessWidget {
     required this.onRotationStart,
     required this.onRotationUpdate,
     required this.onSelectArea,
+    this.route,
+    this.startPoint,
+    this.endPoint,
   });
 
   final ExhibitionMapData data;
@@ -584,6 +708,9 @@ class _MapCanvas extends StatelessWidget {
   final VoidCallback onRotationStart;
   final ValueChanged<double> onRotationUpdate;
   final ValueChanged<MapFeature> onSelectArea;
+  final RouteResult? route;
+  final GeoPoint? startPoint;
+  final GeoPoint? endPoint;
 
   @override
   Widget build(BuildContext context) {
@@ -613,7 +740,7 @@ class _MapCanvas extends StatelessWidget {
               onInteractionStart: (_) => onRotationStart(),
               onInteractionUpdate: (details) {
                 if (details.pointerCount > 1 &&
-                    details.rotation.abs() > 0.002) {
+                  details.rotation.abs() > 0.002) {
                   onRotationUpdate(details.rotation);
                 }
               },
@@ -632,6 +759,9 @@ class _MapCanvas extends StatelessWidget {
                           filteredAreas: filteredAreas,
                           selectedArea: selectedArea,
                           selectedService: selectedService,
+                          route: route,
+                          startPoint: startPoint,
+                          endPoint: endPoint,
                         ),
                       ),
                     ],
@@ -664,12 +794,18 @@ class ExhibitionMapPainter extends CustomPainter {
     required this.filteredAreas,
     required this.selectedArea,
     required this.selectedService,
+    this.route,
+    this.startPoint,
+    this.endPoint,
   });
 
   final ExhibitionMapData data;
   final List<MapFeature> filteredAreas;
   final MapFeature? selectedArea;
   final VisitorService? selectedService;
+  final RouteResult? route;
+  final GeoPoint? startPoint;
+  final GeoPoint? endPoint;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -784,9 +920,66 @@ class ExhibitionMapPainter extends CustomPainter {
       canvas.drawCircle(point, 2.7, treePaint);
     }
 
+    // Paint route polyline if found
+    final activeRoute = route;
+    if (activeRoute != null && startPoint != null && endPoint != null) {
+      final routePoints = <Offset>[];
+      final nodeById = {for (final node in data.nodes) node.id: node};
+      for (final nodeId in activeRoute.nodeIds) {
+        final node = nodeById[nodeId];
+        if (node != null) {
+          routePoints.add(projection.project(GeoPoint(node.longitude, node.latitude)));
+        }
+      }
+
+      if (routePoints.isNotEmpty) {
+        final routePaint = Paint()
+          ..color = const Color(0xff4a90e2)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5.0
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+
+        _drawDashedPolyline(canvas, routePoints, routePaint);
+
+        // Paint start marker (Green)
+        final startOffset = projection.project(startPoint!);
+        canvas.drawCircle(startOffset, 8, Paint()..color = Colors.white);
+        canvas.drawCircle(startOffset, 7, Paint()..color = const Color(0xff4CAF50));
+
+        // Paint end marker (Red)
+        final endOffset = projection.project(endPoint!);
+        canvas.drawCircle(endOffset, 8, Paint()..color = Colors.white);
+        canvas.drawCircle(endOffset, 7, Paint()..color = const Color(0xffF44336));
+      }
+    }
+
     final service = selectedService;
     if (service != null) {
       _drawServiceMarker(canvas, service, projection);
+    }
+  }
+
+  void _drawDashedPolyline(Canvas canvas, List<Offset> points, Paint paint) {
+    if (points.length < 2) return;
+    final path = Path();
+    path.moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < points.length; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+
+    const dashWidth = 8.0;
+    const dashSpace = 6.0;
+    var distance = 0.0;
+
+    for (final pathMetric in path.computeMetrics()) {
+      while (distance < pathMetric.length) {
+        final len = math.min(dashWidth, pathMetric.length - distance);
+        final extract = pathMetric.extractPath(distance, distance + len);
+        canvas.drawPath(extract, paint);
+        distance += dashWidth + dashSpace;
+      }
+      distance = 0.0;
     }
   }
 
@@ -795,7 +988,10 @@ class ExhibitionMapPainter extends CustomPainter {
     return data != oldDelegate.data ||
         filteredAreas != oldDelegate.filteredAreas ||
         selectedArea != oldDelegate.selectedArea ||
-        selectedService != oldDelegate.selectedService;
+        selectedService != oldDelegate.selectedService ||
+        route != oldDelegate.route ||
+        startPoint != oldDelegate.startPoint ||
+        endPoint != oldDelegate.endPoint;
   }
 
   void _drawServiceMarker(
@@ -1045,6 +1241,263 @@ class _TileImage extends StatelessWidget {
         errorBuilder: (_, __, ___) {
           return ColoredBox(color: fallbackColor);
         },
+      ),
+    );
+  }
+}
+
+class _RouteInputPanel extends StatelessWidget {
+  const _RouteInputPanel({
+    required this.locations,
+    required this.startId,
+    required this.endId,
+    required this.onStartChanged,
+    required this.onEndChanged,
+    required this.onFindRoute,
+    required this.onSwap,
+    required this.onBack,
+    this.notice,
+  });
+
+  final List<RoutingLocation> locations;
+  final String startId;
+  final String endId;
+  final ValueChanged<String> onStartChanged;
+  final ValueChanged<String> onEndChanged;
+  final VoidCallback onFindRoute;
+  final VoidCallback onSwap;
+  final VoidCallback onBack;
+  final String? notice;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 12,
+      shadowColor: Colors.black26,
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Color(0xff0b4238)),
+                  onPressed: onBack,
+                  tooltip: 'Exit route finder',
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  'Route Finder',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    color: Color(0xff0b4238),
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.swap_vert, color: Color(0xff0b4238)),
+                  onPressed: onSwap,
+                  tooltip: 'Swap locations',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xfff2f5f3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: startId.isEmpty ? null : startId,
+                  hint: const Row(
+                    children: [
+                      Icon(Icons.circle, color: Color(0xff4CAF50), size: 12),
+                      SizedBox(width: 8),
+                      Text('Select starting point', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                  items: locations.map((loc) {
+                    return DropdownMenuItem<String>(
+                      value: loc.id,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.circle, color: Color(0xff4CAF50), size: 12),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              loc.label,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) onStartChanged(val);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xfff2f5f3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: endId.isEmpty ? null : endId,
+                  hint: const Row(
+                    children: [
+                      Icon(Icons.circle, color: Color(0xffF44336), size: 12),
+                      SizedBox(width: 8),
+                      Text('Select destination', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                  items: locations.map((loc) {
+                    return DropdownMenuItem<String>(
+                      value: loc.id,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.circle, color: Color(0xffF44336), size: 12),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              loc.label,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) onEndChanged(val);
+                  },
+                ),
+              ),
+            ),
+            if (notice != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xfffff3cd),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  notice!,
+                  style: const TextStyle(color: Color(0xff664d03), fontSize: 12),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xff0b4238),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: onFindRoute,
+              icon: const Icon(Icons.directions, size: 20),
+              label: const Text(
+                'Find Route',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MinimizedRouteHeader extends StatelessWidget {
+  const _MinimizedRouteHeader({
+    required this.startLabel,
+    required this.endLabel,
+    required this.distance,
+    required this.onEdit,
+    required this.onClose,
+  });
+
+  final String startLabel;
+  final String endLabel;
+  final double distance;
+  final VoidCallback onEdit;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 10,
+      shadowColor: Colors.black26,
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(30),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.directions, color: Color(0xff0b4238), size: 20),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$startLabel → $endLabel',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Color(0xff0b4238),
+                  ),
+                ),
+                Text(
+                  'Distance: ${distance.toStringAsFixed(0)} meters',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 16),
+            InkWell(
+              onTap: onEdit,
+              borderRadius: BorderRadius.circular(999),
+              child: const CircleAvatar(
+                radius: 14,
+                backgroundColor: Color(0xffe4f4ee),
+                child: Icon(Icons.edit, color: Color(0xff0b4238), size: 14),
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: onClose,
+              borderRadius: BorderRadius.circular(999),
+              child: const CircleAvatar(
+                radius: 14,
+                backgroundColor: Color(0xffffebee),
+                child: Icon(Icons.close, color: Color(0xffc62828), size: 14),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2405,9 +2858,160 @@ class _EmptyResults extends StatelessWidget {
   }
 }
 
+class RoutingNode {
+  final String id;
+  final double latitude;
+  final double longitude;
+
+  RoutingNode({
+    required this.id,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  factory RoutingNode.fromJson(Map<String, dynamic> json) {
+    return RoutingNode(
+      id: json['id'] as String,
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+    );
+  }
+}
+
+class RoutingEdge {
+  final String id;
+  final String? sourceNodeId;
+  final String? targetNodeId;
+  final double distance;
+  final bool bidirectional;
+
+  RoutingEdge({
+    required this.id,
+    this.sourceNodeId,
+    this.targetNodeId,
+    required this.distance,
+    required this.bidirectional,
+  });
+
+  factory RoutingEdge.fromJson(Map<String, dynamic> json) {
+    return RoutingEdge(
+      id: json['id'] as String,
+      sourceNodeId: json['source_node_id'] as String?,
+      targetNodeId: json['target_node_id'] as String?,
+      distance: (json['distance'] as num).toDouble(),
+      bidirectional: json['bidirectional'] as bool? ?? true,
+    );
+  }
+}
+
+class RouteResult {
+  final List<String> nodeIds;
+  final double distance;
+
+  RouteResult({required this.nodeIds, required this.distance});
+}
+
+class RoutingLocation {
+  final String id;
+  final String label;
+  final String description;
+  final GeoPoint position;
+  final String nodeId;
+
+  RoutingLocation({
+    required this.id,
+    required this.label,
+    required this.description,
+    required this.position,
+    required this.nodeId,
+  });
+}
+
+RoutingNode nearestNode(GeoPoint position, List<RoutingNode> nodes) {
+  var nearest = nodes.first;
+  var nearestDistance = double.infinity;
+  for (final node in nodes) {
+    final lngDelta = node.longitude - position.lng;
+    final latDelta = node.latitude - position.lat;
+    final distance = lngDelta * lngDelta + latDelta * latDelta;
+    if (distance < nearestDistance) {
+      nearest = node;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+RouteResult? shortestPath(String startId, String endId, List<RoutingEdge> edges) {
+  if (edges.isEmpty) return null;
+  final graph = <String, List<MapEntry<String, double>>>{};
+  
+  void connect(String source, String target, double distance) {
+    graph.putIfAbsent(source, () => []).add(MapEntry(target, distance));
+  }
+  
+  for (final edge in edges) {
+    final src = edge.sourceNodeId;
+    final dst = edge.targetNodeId;
+    if (src == null || dst == null) continue;
+    connect(src, dst, edge.distance);
+    if (edge.bidirectional) {
+      connect(dst, src, edge.distance);
+    }
+  }
+
+  final distances = <String, double>{startId: 0.0};
+  final previous = <String, String>{};
+  final pending = <String>{startId};
+
+  while (pending.isNotEmpty) {
+    String? current;
+    var currentDistance = double.infinity;
+    
+    for (final nodeId in pending) {
+      final d = distances[nodeId] ?? double.infinity;
+      if (d < currentDistance) {
+        current = nodeId;
+        currentDistance = d;
+      }
+    }
+    
+    if (current == null) break;
+    pending.remove(current);
+    
+    if (current == endId) break;
+    
+    final neighbors = graph[current] ?? const [];
+    for (final neighbor in neighbors) {
+      final neighborId = neighbor.key;
+      final neighborDist = neighbor.value;
+      final nextDistance = currentDistance + neighborDist;
+      
+      final currentNeighborDistance = distances[neighborId] ?? double.infinity;
+      if (nextDistance < currentNeighborDistance) {
+        distances[neighborId] = nextDistance;
+        previous[neighborId] = current;
+        pending.add(neighborId);
+      }
+    }
+  }
+
+  final distance = distances[endId];
+  if (distance == null) return null;
+  
+  final nodeIds = <String>[endId];
+  while (nodeIds.first != startId) {
+    final predecessor = previous[nodeIds.first];
+    if (predecessor == null) return null;
+    nodeIds.insert(0, predecessor);
+  }
+  
+  return RouteResult(nodeIds: nodeIds, distance: distance);
+}
+
 class ExhibitionMapData {
   static final Uri _mapEndpoint = Uri.parse(
-    'https://77.alphabeti.co.tz/api/map',
+    'https://sabasaba.alphabeti.co.tz/api/map',
   );
 
   ExhibitionMapData({
@@ -2416,6 +3020,9 @@ class ExhibitionMapData {
     required this.trees,
     required this.boundaries,
     required this.bounds,
+    required this.nodes,
+    required this.edges,
+    required this.locations,
   });
 
   final List<MapFeature> buildings;
@@ -2423,6 +3030,9 @@ class ExhibitionMapData {
   final List<MapFeature> trees;
   final List<MapFeature> boundaries;
   final GeoBounds bounds;
+  final List<RoutingNode> nodes;
+  final List<RoutingEdge> edges;
+  final List<RoutingLocation> locations;
 
   static Future<ExhibitionMapData> load() async {
     final response = await http.get(
@@ -2440,13 +3050,92 @@ class ExhibitionMapData {
     final data = payload['data'] as Map<String, dynamic>?;
     final layers = data?['layers'] as List<dynamic>?;
     if (layers == null) {
+      print('SabaSaba Map API Error: No layers found in payload: $payload');
       throw const FormatException('Map API response does not contain layers.');
     }
 
-    final buildings = _loadFeatures(layers, 'buildings', Layer.building);
-    final roads = _loadFeatures(layers, 'roads', Layer.road);
-    final trees = _loadFeatures(layers, 'trees', Layer.tree);
-    final boundaries = _loadFeatures(layers, 'boundary', Layer.boundary);
+    print('SabaSaba Map API - Available Layers: ${layers.map((l) => l?['id']).toList()}');
+
+    var buildings = <MapFeature>[];
+    final List<MapFeature> roads;
+    final List<MapFeature> trees;
+    final List<MapFeature> boundaries;
+
+    try {
+      buildings = _loadFeatures(layers, 'booths', Layer.building);
+      if (buildings.isEmpty) {
+        buildings = _loadFeatures(layers, 'buildings', Layer.building);
+      }
+      roads = _loadFeatures(layers, 'roads', Layer.road);
+      trees = _loadFeatures(layers, 'trees', Layer.tree);
+      boundaries = _loadFeatures(layers, 'boundary', Layer.boundary);
+    } catch (e, stackTrace) {
+      print('SabaSaba Map Parsing Failed: $e');
+      print('Stack trace: $stackTrace');
+      rethrow;
+    }
+
+    // Fallback: If both booths and buildings layers have 0 features in the API response,
+    // fetch features of the layer with editor_key = 'buildings' directly from Supabase REST API!
+    if (buildings.isEmpty) {
+      try {
+        final headers = {
+          'apikey': 'sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV',
+          'Authorization': 'Bearer sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV',
+          'Accept': 'application/json',
+        };
+
+        final mapResponse = await http.get(
+          Uri.parse('https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/maps?is_active=eq.true&select=id'),
+          headers: headers,
+        ).timeout(const Duration(seconds: 5));
+
+        if (mapResponse.statusCode == 200) {
+          final mapsJson = jsonDecode(mapResponse.body) as List<dynamic>;
+          if (mapsJson.isNotEmpty) {
+            final mapId = mapsJson.first['id'] as String;
+
+            final layerResponse = await http.get(
+              Uri.parse('https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/layers?map_id=eq.$mapId&editor_key=in.(\"buildings\",\"booths\")&select=id,editor_key'),
+              headers: headers,
+            ).timeout(const Duration(seconds: 5));
+
+            if (layerResponse.statusCode == 200) {
+              final layersJson = jsonDecode(layerResponse.body) as List<dynamic>;
+              
+              var targetLayerId = '';
+              final buildingsLayer = layersJson.firstWhere((l) => l['editor_key'] == 'buildings', orElse: () => null);
+              final boothsLayer = layersJson.firstWhere((l) => l['editor_key'] == 'booths', orElse: () => null);
+              
+              if (buildingsLayer != null) {
+                targetLayerId = buildingsLayer['id'] as String;
+              } else if (boothsLayer != null) {
+                targetLayerId = boothsLayer['id'] as String;
+              }
+
+              if (targetLayerId.isNotEmpty) {
+                final featuresResponse = await http.get(
+                  Uri.parse('https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/features?layer_id=eq.$targetLayerId&select=id,geometry,properties'),
+                  headers: headers,
+                ).timeout(const Duration(seconds: 5));
+
+                if (featuresResponse.statusCode == 200) {
+                  final featuresJson = jsonDecode(featuresResponse.body) as List<dynamic>;
+                  buildings = [
+                    for (var i = 0; i < featuresJson.length; i++)
+                      MapFeature.fromJson(featuresJson[i] as Map<String, dynamic>, Layer.building, i)
+                  ];
+                  print('SabaSaba Map API - Fallback fetched ${buildings.length} building features from Supabase REST.');
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('Supabase buildings fallback failed: $e');
+      }
+    }
+
     final allPoints = [
       for (final feature in [...buildings, ...roads, ...trees, ...boundaries])
         ...feature.allPoints,
@@ -2455,12 +3144,96 @@ class ExhibitionMapData {
       throw const FormatException('Map API returned no renderable geometry.');
     }
 
+    // Parse routing nodes and edges
+    final routingNodesRaw = data?['routingNodes'] as List<dynamic>? ?? const [];
+    var nodes = routingNodesRaw
+        .map((item) => RoutingNode.fromJson(item as Map<String, dynamic>))
+        .toList();
+
+    final routingEdgesRaw = data?['routingEdges'] as List<dynamic>? ?? const [];
+    var edges = routingEdgesRaw
+        .map((item) => RoutingEdge.fromJson(item as Map<String, dynamic>))
+        .toList();
+
+    // Fallback: Query Supabase REST API directly if routing graph is missing from map API response
+    if (nodes.isEmpty) {
+      try {
+        final headers = {
+          'apikey': 'sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV',
+          'Authorization': 'Bearer sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV',
+          'Accept': 'application/json',
+        };
+
+        // 1. Get active map ID
+        final mapResponse = await http.get(
+          Uri.parse('https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/maps?is_active=eq.true&select=id'),
+          headers: headers,
+        ).timeout(const Duration(seconds: 5));
+
+        if (mapResponse.statusCode == 200) {
+          final mapsJson = jsonDecode(mapResponse.body) as List<dynamic>;
+          if (mapsJson.isNotEmpty) {
+            final mapId = mapsJson.first['id'] as String;
+
+            // 2. Fetch routing nodes
+            final nodesResponse = await http.get(
+              Uri.parse('https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/routing_nodes?map_id=eq.$mapId&select=id,latitude,longitude'),
+              headers: headers,
+            ).timeout(const Duration(seconds: 5));
+
+            if (nodesResponse.statusCode == 200) {
+              final nodesJson = jsonDecode(nodesResponse.body) as List<dynamic>;
+              nodes = nodesJson.map((item) => RoutingNode.fromJson(item as Map<String, dynamic>)).toList();
+            }
+
+            // 3. Fetch routing edges
+            final edgesResponse = await http.get(
+              Uri.parse('https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/routing_edges?map_id=eq.$mapId&select=id,source_node_id,target_node_id,distance,bidirectional'),
+              headers: headers,
+            ).timeout(const Duration(seconds: 5));
+
+            if (edgesResponse.statusCode == 200) {
+              final edgesJson = jsonDecode(edgesResponse.body) as List<dynamic>;
+              edges = edgesJson.map((item) => RoutingEdge.fromJson(item as Map<String, dynamic>)).toList();
+            }
+          }
+        }
+      } catch (e) {
+        print('Supabase REST fallback failed: $e');
+      }
+    }
+
+    // Map locations
+    final locations = <RoutingLocation>[];
+    if (nodes.isNotEmpty) {
+      for (final building in buildings) {
+        final position = building.center;
+        final node = nearestNode(position, nodes);
+        locations.add(RoutingLocation(
+          id: building.key,
+          label: building.title,
+          description: 'Area',
+          position: position,
+          nodeId: node.id,
+        ));
+      }
+      locations.sort((a, b) => a.label.compareTo(b.label));
+    }
+
+    print('SabaSaba Map API - parsed buildings count: ${buildings.length}');
+    print('SabaSaba Map API - parsed nodes count: ${nodes.length}');
+    print('SabaSaba Map API - parsed edges count: ${edges.length}');
+    print('SabaSaba Map API - parsed locations count: ${locations.length}');
+
     return ExhibitionMapData(
       buildings: buildings,
       roads: roads,
       trees: trees,
       boundaries: boundaries,
       bounds: GeoBounds.fromPoints(allPoints),
+      nodes: nodes,
+      edges: edges,
+      locations: locations,
     );
   }
 
@@ -2473,10 +3246,19 @@ class ExhibitionMapData {
       (item) => item?['id'] == layerId,
       orElse: () => null,
     );
-    final geoJson = layerJson?['geojson'] as Map<String, dynamic>?;
-    final features = geoJson?['features'] as List<dynamic>?;
+    if (layerJson == null) {
+      print('SabaSaba Map Warning: Layer $layerId not found in API response.');
+      return const [];
+    }
+    final geoJson = layerJson['geojson'] as Map<String, dynamic>?;
+    if (geoJson == null) {
+      print('SabaSaba Map Warning: Layer $layerId is missing geojson object.');
+      return const [];
+    }
+    final features = geoJson['features'] as List<dynamic>?;
     if (features == null) {
-      throw FormatException('Map API layer $layerId is missing GeoJSON.');
+      print('SabaSaba Map Warning: Layer $layerId is missing features array.');
+      return const [];
     }
 
     return [

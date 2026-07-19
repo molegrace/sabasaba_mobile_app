@@ -33,6 +33,9 @@ void main() {
         minLat: -6.87,
         maxLat: -6.86,
       ),
+      nodes: const [],
+      edges: const [],
+      locations: const [],
     );
 
     await tester.pumpWidget(SabaSabaApp(mapData: Future.value(mapData)));
