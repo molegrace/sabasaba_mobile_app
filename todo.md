@@ -1,4 +1,4 @@
-- [ ] double click of the screen should zoom out the map
+- [x] double click of the screen should zoom out the map
 - [ ] change the color of the mp fetures so tht they can match with that of admin dashboard map manager
 - [ ] navigation color discription should be displayed into the map
 - [ ] remove the circles around the round corners

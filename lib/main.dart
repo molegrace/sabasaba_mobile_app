@@ -380,6 +380,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                                   _mapRotation = _gestureRotationStart + angle;
                                 });
                               },
+                              onDoubleTap: () => _zoom(0.82),
                               onSelectArea: (area) {
                                 if (!_routingMode) {
                                   setState(() {
@@ -692,6 +693,7 @@ class _MapCanvas extends StatelessWidget {
     required this.controller,
     required this.onRotationStart,
     required this.onRotationUpdate,
+    required this.onDoubleTap,
     required this.onSelectArea,
     this.route,
     this.startPoint,
@@ -707,6 +709,7 @@ class _MapCanvas extends StatelessWidget {
   final TransformationController controller;
   final VoidCallback onRotationStart;
   final ValueChanged<double> onRotationUpdate;
+  final VoidCallback onDoubleTap;
   final ValueChanged<MapFeature> onSelectArea;
   final RouteResult? route;
   final GeoPoint? startPoint;
@@ -722,6 +725,7 @@ class _MapCanvas extends StatelessWidget {
           decoration: const BoxDecoration(color: Color(0xffdfe7dc)),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onDoubleTap: onDoubleTap,
             onTapUp: (details) {
               final scenePoint = controller.toScene(details.localPosition);
               final hit = data.hitTest(
