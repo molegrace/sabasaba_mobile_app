@@ -1,0 +1,10 @@
+{
+    "files.exclude": {
+        "linux": true,
+        ".dart_tool/": true,
+        "windows": true,
+        "macos": true,
+        "ios": true,
+        ".flutter-plugins-dependencies": true,
+    }
+}
