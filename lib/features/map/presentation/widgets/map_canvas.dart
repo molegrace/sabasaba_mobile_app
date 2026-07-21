@@ -200,18 +200,6 @@ class ExhibitionMapPainter extends CustomPainter {
 
     _drawRoundabouts(canvas, projection);
 
-    final treePaint = Paint()
-      ..color = const Color(0xff2d7d46)
-      ..style = PaintingStyle.fill;
-    final treeHaloPaint = Paint()
-      ..color = const Color(0xffffffff)
-      ..style = PaintingStyle.fill;
-    for (final tree in data.trees) {
-      final point = projection.project(tree.points.first);
-      canvas.drawCircle(point, 4.2, treeHaloPaint);
-      canvas.drawCircle(point, 2.7, treePaint);
-    }
-
     // Paint route polyline if found
     final activeRoute = route;
     if (activeRoute != null && startPoint != null && endPoint != null) {
