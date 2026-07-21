@@ -9,7 +9,8 @@ class ExhibitionMapScreen extends StatefulWidget {
   State<ExhibitionMapScreen> createState() => _ExhibitionMapScreenState();
 }
 
-class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
+class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _authNameController = TextEditingController();
   final TextEditingController _authEmailController = TextEditingController();
@@ -24,6 +25,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   final TransformationController _transformController =
       TransformationController();
+  final GlobalKey _mapViewportKey = GlobalKey();
+  late final AnimationController _mapAnimationController;
+  Animation<Matrix4>? _mapAnimation;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   late Future<ExhibitionMapData> _mapFuture;
@@ -66,6 +70,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
   @override
   void initState() {
     super.initState();
+    _mapAnimationController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1400),
+        )..addListener(() {
+          final animation = _mapAnimation;
+          if (animation != null) {
+            _transformController.value = animation.value;
+          }
+        });
     _mapFuture = widget.mapData ?? ExhibitionMapData.load();
     if (widget.mapData == null) {
       _monitorConnectivity();
@@ -89,6 +103,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
     _productController.dispose();
     _replyController.dispose();
     _searchFocusNode.dispose();
+    _mapAnimationController.dispose();
     _transformController.dispose();
     super.dispose();
   }
@@ -322,53 +337,57 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                       return Stack(
                         children: [
                           Positioned.fill(
-                            child: MapCanvas(
-                              data: data,
-                              filteredAreas: visibleAreas,
-                              selectedArea: activeArea,
-                              selectedService: _selectedService,
-                              tileStyle: _tileStyle,
-                              rotation: _mapRotation,
-                              controller: _transformController,
-                              onRotationStart: () {
-                                _gestureRotationStart = _mapRotation;
-                              },
-                              onRotationUpdate: (angle) {
-                                setState(() {
-                                  _mapRotation = _gestureRotationStart + angle;
-                                });
-                              },
-                              onDoubleTap: () => _zoom(0.82),
-                              onSelectArea: (area) {
-                                if (!_routingMode) {
+                            child: SizedBox(
+                              key: _mapViewportKey,
+                              child: MapCanvas(
+                                data: data,
+                                filteredAreas: visibleAreas,
+                                selectedArea: activeArea,
+                                selectedService: _selectedService,
+                                tileStyle: _tileStyle,
+                                rotation: _mapRotation,
+                                controller: _transformController,
+                                onRotationStart: () {
+                                  _gestureRotationStart = _mapRotation;
+                                },
+                                onRotationUpdate: (angle) {
                                   setState(() {
-                                    _selectedArea = area;
-                                    _selectedService = null;
+                                    _mapRotation =
+                                        _gestureRotationStart + angle;
                                   });
-                                  _searchFocusNode.unfocus();
-                                }
-                              },
-                              route: _currentRoute,
-                              startPoint:
-                                  _currentRoute == null ||
-                                      _startLocationId.isEmpty
-                                  ? null
-                                  : data.locations
-                                        .firstWhere(
-                                          (loc) => loc.id == _startLocationId,
-                                          orElse: () => data.locations.first,
-                                        )
-                                        .position,
-                              endPoint:
-                                  _currentRoute == null ||
-                                      _endLocationId.isEmpty
-                                  ? null
-                                  : data.locations
-                                        .firstWhere(
-                                          (loc) => loc.id == _endLocationId,
-                                          orElse: () => data.locations.first,
-                                        )
-                                        .position,
+                                },
+                                onDoubleTap: () => _zoom(0.82),
+                                onSelectArea: (area) {
+                                  if (!_routingMode) {
+                                    setState(() {
+                                      _selectedArea = area;
+                                      _selectedService = null;
+                                    });
+                                    _searchFocusNode.unfocus();
+                                  }
+                                },
+                                route: _currentRoute,
+                                startPoint:
+                                    _currentRoute == null ||
+                                        _startLocationId.isEmpty
+                                    ? null
+                                    : data.locations
+                                          .firstWhere(
+                                            (loc) => loc.id == _startLocationId,
+                                            orElse: () => data.locations.first,
+                                          )
+                                          .position,
+                                endPoint:
+                                    _currentRoute == null ||
+                                        _endLocationId.isEmpty
+                                    ? null
+                                    : data.locations
+                                          .firstWhere(
+                                            (loc) => loc.id == _endLocationId,
+                                            orElse: () => data.locations.first,
+                                          )
+                                          .position,
+                              ),
                             ),
                           ),
                           if (modalArea != null && !_routingMode)
@@ -682,6 +701,62 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
     });
   }
 
+  void _fitRouteToScreen(ExhibitionMapData data, RouteResult route) {
+    final renderBox =
+        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) {
+      return;
+    }
+
+    final size = renderBox.size;
+    final projection = data.projectionFor(size);
+    final nodeById = {for (final node in data.nodes) node.id: node};
+    final points = route.nodeIds
+        .map((nodeId) => nodeById[nodeId])
+        .whereType<RoutingNode>()
+        .map(
+          (node) => projection.project(GeoPoint(node.longitude, node.latitude)),
+        )
+        .toList();
+    if (points.isEmpty) {
+      return;
+    }
+
+    final left = points.map((point) => point.dx).reduce(math.min);
+    final right = points.map((point) => point.dx).reduce(math.max);
+    final top = points.map((point) => point.dy).reduce(math.min);
+    final bottom = points.map((point) => point.dy).reduce(math.max);
+    const padding = 72.0;
+    final routeWidth = math.max(1.0, right - left);
+    final routeHeight = math.max(1.0, bottom - top);
+    final scale = math
+        .min(
+          (size.width - padding * 2) / routeWidth,
+          (size.height - padding * 2) / routeHeight,
+        )
+        .clamp(minMapScale, maxMapScale);
+    final routeCenter = Offset((left + right) / 2, (top + bottom) / 2);
+    final target = Matrix4.identity()
+      ..translate(
+        size.width / 2 - routeCenter.dx * scale,
+        size.height / 2 - routeCenter.dy * scale,
+      )
+      ..scale(scale);
+
+    _mapAnimationController.stop();
+    _mapAnimation =
+        Matrix4Tween(
+          begin: _transformController.value.clone(),
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _mapAnimationController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
+    _mapAnimationController.forward(from: 0);
+  }
+
   void _calculateRoute(ExhibitionMapData data) {
     setState(() => _routeNotice = null);
     if (_startLocationId.isEmpty || _endLocationId.isEmpty) {
@@ -712,6 +787,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
     setState(() {
       _currentRoute = result;
       _routeMinimized = true;
+      _mapRotation = 0;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(_currentRoute, result)) {
+        _fitRouteToScreen(data, result);
+      }
     });
   }
 }
