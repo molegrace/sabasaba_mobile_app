@@ -224,22 +224,35 @@ class ExhibitionMapPainter extends CustomPainter {
 
         _drawDashedPolyline(canvas, routePoints, routePaint);
 
-        // Paint start marker (Green)
+        // Paint the start as a blue dot.
         final startOffset = projection.project(startPoint!);
-        canvas.drawCircle(startOffset, 4.5, Paint()..color = Colors.white);
+        canvas.drawCircle(startOffset, 3, Paint()..color = Colors.white);
         canvas.drawCircle(
           startOffset,
-          3.5,
-          Paint()..color = const Color(0xff4CAF50),
+          2.5,
+          Paint()..color = const Color(0xff1976d2),
         );
 
-        // Paint end marker (Red)
+        // Paint the destination as a red location pin whose tip marks the point.
         final endOffset = projection.project(endPoint!);
-        canvas.drawCircle(endOffset, 4.5, Paint()..color = Colors.white);
-        canvas.drawCircle(
-          endOffset,
-          3.5,
-          Paint()..color = const Color(0xffF44336),
+        final destinationPainter = TextPainter(
+          text: TextSpan(
+            text: String.fromCharCode(Icons.location_pin.codePoint),
+            style: TextStyle(
+              color: const Color(0xffd32f2f),
+              fontSize: 14,
+              fontFamily: Icons.location_pin.fontFamily,
+              package: Icons.location_pin.fontPackage,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        destinationPainter.paint(
+          canvas,
+          Offset(
+            endOffset.dx - destinationPainter.width / 2,
+            endOffset.dy - destinationPainter.height,
+          ),
         );
       }
     }
