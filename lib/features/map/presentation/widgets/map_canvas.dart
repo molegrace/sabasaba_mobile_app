@@ -154,38 +154,17 @@ class ExhibitionMapPainter extends CustomPainter {
       }
     }
 
-    final roadShadowPaint = Paint()
-      ..color = const Color(0x332d4b43)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 5.4
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    final roadEdgePaint = Paint()
-      ..color = const Color(0xffd89b48)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.3
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
     final roadPaint = Paint()
-      ..color = const Color(0xfffffff8)
+      ..color = const Color(0xffc8c8c8)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.7
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    final roadCenterPaint = Paint()
-      ..color = const Color(0x88c9772d)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.6
+      ..strokeWidth = 1.6
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
     for (final road in data.roads) {
       for (final line in road.lines) {
         final path = _linePath(line, projection);
-        canvas.drawPath(path, roadShadowPaint);
-        canvas.drawPath(path, roadEdgePaint);
         canvas.drawPath(path, roadPaint);
-        canvas.drawPath(path, roadCenterPaint);
       }
     }
 
@@ -251,7 +230,7 @@ class ExhibitionMapPainter extends CustomPainter {
         final routePaint = Paint()
           ..color = const Color(0xff4a90e2)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 5.0
+          ..strokeWidth = 1.6
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round;
 
@@ -259,19 +238,19 @@ class ExhibitionMapPainter extends CustomPainter {
 
         // Paint start marker (Green)
         final startOffset = projection.project(startPoint!);
-        canvas.drawCircle(startOffset, 8, Paint()..color = Colors.white);
+        canvas.drawCircle(startOffset, 4.5, Paint()..color = Colors.white);
         canvas.drawCircle(
           startOffset,
-          7,
+          3.5,
           Paint()..color = const Color(0xff4CAF50),
         );
 
         // Paint end marker (Red)
         final endOffset = projection.project(endPoint!);
-        canvas.drawCircle(endOffset, 8, Paint()..color = Colors.white);
+        canvas.drawCircle(endOffset, 4.5, Paint()..color = Colors.white);
         canvas.drawCircle(
           endOffset,
-          7,
+          3.5,
           Paint()..color = const Color(0xffF44336),
         );
       }
@@ -291,8 +270,8 @@ class ExhibitionMapPainter extends CustomPainter {
       path.lineTo(points[i].dx, points[i].dy);
     }
 
-    const dashWidth = 8.0;
-    const dashSpace = 6.0;
+    const dashWidth = 4.0;
+    const dashSpace = 2.0;
     var distance = 0.0;
 
     for (final pathMetric in path.computeMetrics()) {
@@ -396,19 +375,9 @@ class ExhibitionMapPainter extends CustomPainter {
   }
 
   void _drawRoundabouts(Canvas canvas, MapProjection projection) {
-    final outerPaint = Paint()
-      ..color = const Color(0xffd89b48)
-      ..style = PaintingStyle.fill;
     final roadPaint = Paint()
-      ..color = const Color(0xfffffff8)
+      ..color = const Color(0xffc8c8c8)
       ..style = PaintingStyle.fill;
-    final islandPaint = Paint()
-      ..color = const Color(0xff65b98e)
-      ..style = PaintingStyle.fill;
-    final islandStrokePaint = Paint()
-      ..color = const Color(0xffffffff)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
 
     final roundabouts = [
       const GeoPoint(39.278831168638066, -6.864770815767824),
@@ -417,10 +386,7 @@ class ExhibitionMapPainter extends CustomPainter {
 
     for (final roundabout in roundabouts) {
       final center = projection.project(roundabout);
-      canvas.drawCircle(center, 6.8, outerPaint);
-      canvas.drawCircle(center, 5, roadPaint);
-      canvas.drawCircle(center, 2.5, islandPaint);
-      canvas.drawCircle(center, 2.5, islandStrokePaint);
+      canvas.drawCircle(center, 2.5, roadPaint);
     }
   }
 
