@@ -1,4 +1,4 @@
-﻿part of '../../../../main.dart';
+part of '../../../../main.dart';
 
 class MapCanvas extends StatelessWidget {
   const MapCanvas({
@@ -132,19 +132,18 @@ class ExhibitionMapPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final projection = data.projectionFor(size);
-    final muted = filteredAreas.length != data.buildings.length;
     final filteredIds = filteredAreas.map((feature) => feature.key).toSet();
 
     final boundaryPaint = Paint()
       ..color = const Color(0xb8c99b57)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.5
+      ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     final boundaryHaloPaint = Paint()
       ..color = const Color(0x44ffffff)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 7
+      ..strokeWidth = 4
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     for (final boundary in data.boundaries) {
@@ -191,17 +190,9 @@ class ExhibitionMapPainter extends CustomPainter {
     }
 
     for (final building in data.buildings) {
-      final isSelected = selectedArea?.key == building.key;
-      final isFiltered = filteredIds.contains(building.key);
       final paint = Paint()
         ..style = PaintingStyle.fill
-        ..color = isSelected
-            ? const Color(0xfff26430)
-            : isFiltered
-            ? const Color(0xff1aa987)
-            : muted
-            ? const Color(0xff8bb8aa)
-            : const Color(0xff50b89d);
+        ..color = const Color(0xffb0b0b0);
 
       for (final polygon in building.polygons) {
         final path = _polygonPath(polygon, projection);
@@ -214,7 +205,7 @@ class ExhibitionMapPainter extends CustomPainter {
       final isFiltered = filteredIds.contains(building.key);
       final stroke = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 3.2 : 1.3
+        ..strokeWidth = 0.5
         ..color = isSelected
             ? const Color(0xff70210d)
             : const Color(0xcc124e43);
@@ -417,7 +408,7 @@ class ExhibitionMapPainter extends CustomPainter {
     final islandStrokePaint = Paint()
       ..color = const Color(0xffffffff)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
+      ..strokeWidth = 0.8;
 
     final roundabouts = [
       const GeoPoint(39.278831168638066, -6.864770815767824),
