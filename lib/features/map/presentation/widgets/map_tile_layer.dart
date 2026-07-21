@@ -1,10 +1,15 @@
 part of '../../../../main.dart';
 
 class MapTileLayer extends StatelessWidget {
-  const MapTileLayer({required this.data, required this.tileStyle});
+  const MapTileLayer({
+    required this.data,
+    required this.tileStyle,
+    required this.refreshGeneration,
+  });
 
   final ExhibitionMapData data;
   final MapTileStyle tileStyle;
+  final int refreshGeneration;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +48,7 @@ class MapTileLayer extends StatelessWidget {
                     rect: _tileRect(x, y, zoom, projection),
                     url: tileStyle.tileUrl(x, y, zoom),
                     fallbackColor: tileStyle.fallbackColor,
+                    refreshGeneration: refreshGeneration,
                   ),
             ],
           ),
@@ -94,11 +100,13 @@ class TileImage extends StatefulWidget {
     required this.rect,
     required this.url,
     required this.fallbackColor,
+    required this.refreshGeneration,
   });
 
   final Rect rect;
   final String url;
   final Color fallbackColor;
+  final int refreshGeneration;
 
   @override
   State<TileImage> createState() => _TileImageState();
@@ -118,6 +126,8 @@ class _TileImageState extends State<TileImage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.url != widget.url) {
       _loadImage();
+    } else if (oldWidget.refreshGeneration != widget.refreshGeneration) {
+      unawaited(_refreshImage());
     }
   }
 
@@ -130,6 +140,22 @@ class _TileImageState extends State<TileImage> {
     final cached = await cacheManager.getFileFromCache(url);
     final file = cached?.file ?? await cacheManager.getSingleFile(url);
     return file.readAsBytes();
+  }
+
+  Future<void> _refreshImage() async {
+    final url = widget.url;
+    try {
+      final refreshed = await DefaultCacheManager().downloadFile(
+        url,
+        force: true,
+      );
+      final bytes = await refreshed.file.readAsBytes();
+      if (mounted && widget.url == url) {
+        setState(() => _imageBytes = Future.value(bytes));
+      }
+    } catch (_) {
+      // Keep displaying the cached tile when a background refresh fails.
+    }
   }
 
   @override

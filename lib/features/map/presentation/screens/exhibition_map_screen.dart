@@ -34,6 +34,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   late Future<ExhibitionMapData> _mapFuture;
   bool _isOffline = false;
   bool _showConnectionBanner = false;
+  int _tileRefreshGeneration = 0;
   String _query = '';
   bool _searchFocused = false;
   double _mapRotation = 0;
@@ -356,6 +357,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                                 selectedArea: activeArea,
                                 selectedService: _selectedService,
                                 tileStyle: _tileStyle,
+                                tileRefreshGeneration: _tileRefreshGeneration,
                                 rotation: _mapRotation,
                                 controller: _transformController,
                                 onRotationStart: () {
@@ -600,6 +602,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       _showConnectionBanner = true;
       if (reconnected) {
         _mapFuture = ExhibitionMapData.load();
+        _tileRefreshGeneration++;
       }
     });
     _connectionBannerTimer = Timer(const Duration(seconds: 5), () {

@@ -7,6 +7,7 @@ class MapCanvas extends StatelessWidget {
     required this.selectedArea,
     required this.selectedService,
     required this.tileStyle,
+    required this.tileRefreshGeneration,
     required this.rotation,
     required this.controller,
     required this.onRotationStart,
@@ -23,6 +24,7 @@ class MapCanvas extends StatelessWidget {
   final MapFeature? selectedArea;
   final VisitorService? selectedService;
   final MapTileStyle tileStyle;
+  final int tileRefreshGeneration;
   final double rotation;
   final TransformationController controller;
   final VoidCallback onRotationStart;
@@ -74,7 +76,11 @@ class MapCanvas extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      MapTileLayer(data: data, tileStyle: tileStyle),
+                      MapTileLayer(
+                        data: data,
+                        tileStyle: tileStyle,
+                        refreshGeneration: tileRefreshGeneration,
+                      ),
                       CustomPaint(
                         painter: ExhibitionMapPainter(
                           data: data,
