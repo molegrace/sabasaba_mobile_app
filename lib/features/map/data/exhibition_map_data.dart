@@ -1,6 +1,7 @@
-﻿part of '../../../main.dart';
+part of '../../../main.dart';
 
 class ExhibitionMapData {
+  static const _mapCacheKey = 'sabasaba-exhibition-map-v1';
   static final Uri _mapEndpoint = Uri.parse(
     'https://sabasaba.alphabeti.co.tz/api/map',
   );
@@ -26,18 +27,37 @@ class ExhibitionMapData {
   final List<RoutingLocation> locations;
 
   static Future<ExhibitionMapData> load() async {
-    final response = await http.get(
-      _mapEndpoint,
-      headers: const {'accept': 'application/json'},
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Map API returned ${response.statusCode} ${response.reasonPhrase ?? ''}'
-            .trim(),
+    Map<String, dynamic> payload;
+    try {
+      final response = await http
+          .get(_mapEndpoint, headers: const {'accept': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Map API returned ${response.statusCode} ${response.reasonPhrase ?? ''}'
+              .trim(),
+        );
+      }
+      payload = jsonDecode(response.body) as Map<String, dynamic>;
+      await DefaultCacheManager().putFile(
+        _mapEndpoint.toString(),
+        response.bodyBytes,
+        key: _mapCacheKey,
+        maxAge: const Duration(days: 365),
+        fileExtension: 'json',
       );
+    } catch (networkError) {
+      final cached = await DefaultCacheManager().getFileFromCache(
+        _mapCacheKey,
+        ignoreMemCache: true,
+      );
+      if (cached == null) {
+        rethrow;
+      }
+      final cachedBytes = await cached.file.readAsBytes();
+      payload = jsonDecode(utf8.decode(cachedBytes)) as Map<String, dynamic>;
     }
 
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
     final data = payload['data'] as Map<String, dynamic>?;
     final layers = data?['layers'] as List<dynamic>?;
     if (layers == null) {

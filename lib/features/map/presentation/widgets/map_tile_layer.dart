@@ -1,4 +1,4 @@
-﻿part of '../../../../main.dart';
+part of '../../../../main.dart';
 
 class MapTileLayer extends StatelessWidget {
   const MapTileLayer({required this.data, required this.tileStyle});
@@ -89,7 +89,7 @@ class MapTileLayer extends StatelessWidget {
   }
 }
 
-class TileImage extends StatelessWidget {
+class TileImage extends StatefulWidget {
   const TileImage({
     required this.rect,
     required this.url,
@@ -101,17 +101,59 @@ class TileImage extends StatelessWidget {
   final Color fallbackColor;
 
   @override
+  State<TileImage> createState() => _TileImageState();
+}
+
+class _TileImageState extends State<TileImage> {
+  late Future<List<int>> _imageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  @override
+  void didUpdateWidget(TileImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _loadImage();
+    }
+  }
+
+  void _loadImage() {
+    _imageBytes = _loadCachedImage(widget.url);
+  }
+
+  Future<List<int>> _loadCachedImage(String url) async {
+    final cacheManager = DefaultCacheManager();
+    final cached = await cacheManager.getFileFromCache(url);
+    final file = cached?.file ?? await cacheManager.getSingleFile(url);
+    return file.readAsBytes();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Positioned(
-      left: rect.left,
-      top: rect.top,
-      width: math.max(1, rect.width),
-      height: math.max(1, rect.height),
-      child: Image.network(
-        url,
-        fit: BoxFit.fill,
-        errorBuilder: (_, __, ___) {
-          return ColoredBox(color: fallbackColor);
+      left: widget.rect.left,
+      top: widget.rect.top,
+      width: math.max(1, widget.rect.width),
+      height: math.max(1, widget.rect.height),
+      child: FutureBuilder<List<int>>(
+        future: _imageBytes,
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes == null) {
+            return ColoredBox(color: widget.fallbackColor);
+          }
+          return Image.memory(
+            Uint8List.fromList(bytes),
+            fit: BoxFit.fill,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) {
+              return ColoredBox(color: widget.fallbackColor);
+            },
+          );
         },
       ),
     );
