@@ -1,4 +1,4 @@
-﻿part of '../../../../main.dart';
+part of '../../../../main.dart';
 
 class ExhibitionMapScreen extends StatefulWidget {
   const ExhibitionMapScreen({super.key, this.mapData});
@@ -514,13 +514,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
                                     onTileStyleChanged: (style) {
                                       setState(() => _tileStyle = style);
                                     },
-                                    onZoomIn: () => _zoom(1.22),
-                                    onZoomOut: () => _zoom(0.82),
-                                    onReset: () {
-                                      _transformController.value =
-                                          Matrix4.identity();
-                                      setState(() => _mapRotation = 0);
-                                    },
+                                    onLocateMe: _locateMe,
                                   ),
                                   const SizedBox(height: 12),
                                   CompassControl(rotation: _mapRotation),
@@ -588,6 +582,44 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen> {
 
     final adjustedFactor = nextScale / currentScale;
     _transformController.value = current.scaled(adjustedFactor, adjustedFactor);
+  }
+
+  Future<void> _locateMe() async {
+    if (!_locationAllowed) {
+      final allowed = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Allow location access?'),
+            content: const Text(
+              'SabaSaba needs your device location to locate you on the map.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Not now'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Allow'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (allowed != true || !mounted) {
+        return;
+      }
+      setState(() => _locationAllowed = true);
+    }
+
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Location access enabled.')));
   }
 
   Future<void> _openService(VisitorService service) async {

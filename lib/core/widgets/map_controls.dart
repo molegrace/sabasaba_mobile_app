@@ -1,19 +1,15 @@
-﻿part of '../../main.dart';
+part of '../../main.dart';
 
 class MapControls extends StatelessWidget {
   const MapControls({
     required this.tileStyle,
     required this.onTileStyleChanged,
-    required this.onZoomIn,
-    required this.onZoomOut,
-    required this.onReset,
+    required this.onLocateMe,
   });
 
   final MapTileStyle tileStyle;
   final ValueChanged<MapTileStyle> onTileStyleChanged;
-  final VoidCallback onZoomIn;
-  final VoidCallback onZoomOut;
-  final VoidCallback onReset;
+  final VoidCallback onLocateMe;
 
   @override
   Widget build(BuildContext context) {
@@ -25,18 +21,8 @@ class MapControls extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            tooltip: 'Zoom in',
-            onPressed: onZoomIn,
-            icon: const Icon(Icons.add),
-          ),
-          IconButton(
-            tooltip: 'Zoom out',
-            onPressed: onZoomOut,
-            icon: const Icon(Icons.remove),
-          ),
-          IconButton(
-            tooltip: 'Reset map',
-            onPressed: onReset,
+            tooltip: 'Locate me',
+            onPressed: onLocateMe,
             icon: const Icon(Icons.my_location),
           ),
           PopupMenuButton<MapTileStyle>(
