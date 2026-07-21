@@ -1,7 +1,7 @@
 part of '../../main.dart';
 
 class ConnectionBanner extends StatelessWidget {
-  const ConnectionBanner({required this.isOffline});
+  const ConnectionBanner({super.key, required this.isOffline});
 
   final bool isOffline;
 

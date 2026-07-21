@@ -29,9 +29,11 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   late final AnimationController _mapAnimationController;
   Animation<Matrix4>? _mapAnimation;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Timer? _connectionBannerTimer;
 
   late Future<ExhibitionMapData> _mapFuture;
   bool _isOffline = false;
+  bool _showConnectionBanner = false;
   String _query = '';
   bool _searchFocused = false;
   double _mapRotation = 0;
@@ -93,6 +95,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   @override
   void dispose() {
     _connectivitySubscription?.cancel();
+    _connectionBannerTimer?.cancel();
     _searchController.dispose();
     _authNameController.dispose();
     _authEmailController.dispose();
@@ -147,7 +150,15 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       ),
       body: Column(
         children: [
-          ConnectionBanner(isOffline: _isOffline),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: _showConnectionBanner
+                ? ConnectionBanner(
+                    key: ValueKey(_isOffline),
+                    isOffline: _isOffline,
+                  )
+                : const SizedBox.shrink(),
+          ),
           Expanded(
             child: FutureBuilder<ExhibitionMapData>(
               future: _mapFuture,
@@ -583,10 +594,17 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     final isOffline =
         results.isEmpty || results.contains(ConnectivityResult.none);
     final reconnected = _isOffline && !isOffline;
+    _connectionBannerTimer?.cancel();
     setState(() {
       _isOffline = isOffline;
+      _showConnectionBanner = true;
       if (reconnected) {
         _mapFuture = ExhibitionMapData.load();
+      }
+    });
+    _connectionBannerTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) {
+        setState(() => _showConnectionBanner = false);
       }
     });
   }
