@@ -75,10 +75,11 @@ class ExhibitionMapData {
     final List<MapFeature> boundaries;
 
     try {
-      buildings = _loadFeatures(layers, 'booths', Layer.building);
-      if (buildings.isEmpty) {
-        buildings = _loadFeatures(layers, 'buildings', Layer.building);
-      }
+      final boothsFeatures = _loadFeatures(layers, 'booths', Layer.building);
+      final spacesFeatures = _loadFeatures(layers, 'spaces', Layer.building);
+      final buildingsFeatures = _loadFeatures(layers, 'buildings', Layer.building);
+      buildings = [...boothsFeatures, ...spacesFeatures, ...buildingsFeatures];
+
       roads = _loadFeatures(layers, 'roads', Layer.road);
       trees = _loadFeatures(layers, 'trees', Layer.tree);
       boundaries = _loadFeatures(layers, 'boundary', Layer.boundary);
@@ -89,7 +90,7 @@ class ExhibitionMapData {
     }
 
     // Fallback: If both booths and buildings layers have 0 features in the API response,
-    // fetch features of the layer with editor_key = 'buildings' directly from Supabase REST API!
+    // fetch features of layers with editor_key in ('spaces', 'buildings', 'booths') directly from Supabase REST API!
     if (buildings.isEmpty) {
       try {
         final headers = {
@@ -116,7 +117,7 @@ class ExhibitionMapData {
             final layerResponse = await http
                 .get(
                   Uri.parse(
-                    'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/layers?map_id=eq.$mapId&editor_key=in.(\"buildings\",\"booths\")&select=id,editor_key',
+                    'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/layers?map_id=eq.$mapId&editor_key=in.("spaces","buildings","booths")&select=id,editor_key',
                   ),
                   headers: headers,
                 )
@@ -126,47 +127,43 @@ class ExhibitionMapData {
               final layersJson =
                   jsonDecode(layerResponse.body) as List<dynamic>;
 
-              var targetLayerId = '';
-              final buildingsLayer = layersJson.firstWhere(
-                (l) => l['editor_key'] == 'buildings',
-                orElse: () => null,
-              );
-              final boothsLayer = layersJson.firstWhere(
-                (l) => l['editor_key'] == 'booths',
-                orElse: () => null,
-              );
-
-              if (buildingsLayer != null) {
-                targetLayerId = buildingsLayer['id'] as String;
-              } else if (boothsLayer != null) {
-                targetLayerId = boothsLayer['id'] as String;
+              final targetLayerIds = <String>[];
+              for (final layerItem in layersJson) {
+                final editorKey = layerItem['editor_key'] as String?;
+                if (editorKey == 'spaces' || editorKey == 'buildings' || editorKey == 'booths') {
+                  targetLayerIds.add(layerItem['id'] as String);
+                }
               }
 
-              if (targetLayerId.isNotEmpty) {
-                final featuresResponse = await http
-                    .get(
-                      Uri.parse(
-                        'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/features?layer_id=eq.$targetLayerId&select=id,geometry,properties',
-                      ),
-                      headers: headers,
-                    )
-                    .timeout(const Duration(seconds: 5));
+              if (targetLayerIds.isNotEmpty) {
+                final tempBuildings = <MapFeature>[];
+                for (final targetLayerId in targetLayerIds) {
+                  final featuresResponse = await http
+                      .get(
+                        Uri.parse(
+                          'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/features?layer_id=eq.$targetLayerId&select=id,geometry,properties',
+                        ),
+                        headers: headers,
+                      )
+                      .timeout(const Duration(seconds: 5));
 
-                if (featuresResponse.statusCode == 200) {
-                  final featuresJson =
-                      jsonDecode(featuresResponse.body) as List<dynamic>;
-                  buildings = [
-                    for (var i = 0; i < featuresJson.length; i++)
-                      MapFeature.fromJson(
-                        featuresJson[i] as Map<String, dynamic>,
-                        Layer.building,
-                        i,
-                      ),
-                  ];
-                  print(
-                    'SabaSaba Map API - Fallback fetched ${buildings.length} building features from Supabase REST.',
-                  );
+                  if (featuresResponse.statusCode == 200) {
+                    final featuresJson =
+                        jsonDecode(featuresResponse.body) as List<dynamic>;
+                    tempBuildings.addAll([
+                      for (var i = 0; i < featuresJson.length; i++)
+                        MapFeature.fromJson(
+                          featuresJson[i] as Map<String, dynamic>,
+                          Layer.building,
+                          tempBuildings.length + i,
+                        ),
+                    ]);
+                  }
                 }
+                buildings = tempBuildings;
+                print(
+                  'SabaSaba Map API - Fallback fetched ${buildings.length} building features from Supabase REST.',
+                );
               }
             }
           }

@@ -1,4 +1,4 @@
-﻿part of '../../main.dart';
+part of '../../main.dart';
 
 class MapFeature {
   MapFeature({
@@ -28,8 +28,10 @@ class MapFeature {
 
   String get title {
     if (layer == Layer.building) {
-      final label = shortCode.isEmpty ? '${index + 1}' : shortCode;
-      return 'Area $label';
+      if (code != null && code!.isNotEmpty) {
+        return code!;
+      }
+      return 'Area ${index + 1}';
     }
     if (layer == Layer.road) {
       return 'Route ${id ?? index + 1}';
@@ -109,11 +111,17 @@ class MapFeature {
       points.add(_parsePoint(coordinates as List<dynamic>));
     }
 
+    final nameVal = properties['name'] ??
+        properties['booth_code'] ??
+        properties['number'] ??
+        properties['1'] ??
+        properties['id'];
+
     return MapFeature(
       layer: layer,
       index: index,
       id: properties['id'],
-      code: (properties['1'] ?? properties['name'])?.toString(),
+      code: nameVal?.toString(),
       polygons: polygons,
       lines: lines,
       points: points,
