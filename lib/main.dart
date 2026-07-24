@@ -7,6 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/http.dart' as http;
+import 'package:sabasaba_mobile_app/features/tickets/presentation/tickets_tab.dart';
 
 part 'features/map/presentation/screens/exhibition_map_screen.dart';
 part 'features/map/presentation/widgets/map_canvas.dart';

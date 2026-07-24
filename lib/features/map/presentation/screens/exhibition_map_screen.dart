@@ -1,5 +1,6 @@
 part of '../../../../main.dart';
 
+
 class ExhibitionMapScreen extends StatefulWidget {
   const ExhibitionMapScreen({super.key, this.mapData});
 
@@ -125,27 +126,27 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           NavigationDestination(
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map),
-            label: 'Map',
+            label: 'Explore',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.badge_outlined),
+            selectedIcon: Icon(Icons.badge),
+            label: 'Booths',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.event_outlined),
+            selectedIcon: Icon(Icons.event),
+            label: 'Tickets',
           ),
           NavigationDestination(
             icon: Icon(Icons.storefront_outlined),
             selectedIcon: Icon(Icons.storefront),
-            label: 'Services',
+            label: 'Facilities',
           ),
           NavigationDestination(
             icon: Icon(Icons.info_outline),
             selectedIcon: Icon(Icons.info),
             label: 'Info',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.badge_outlined),
-            selectedIcon: Icon(Icons.badge),
-            label: 'Exhibitor',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'You',
           ),
         ],
       ),
@@ -185,7 +186,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     ? _selectedArea
                     : null;
 
-                if (_selectedNavIndex == 1) {
+                if (_selectedNavIndex == 0) {
                   return ServicesTab(
                     areas: data.buildings,
                     selectedService: _selectedService,
@@ -193,7 +194,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   );
                 }
 
-                if (_selectedNavIndex == 2) {
+                if (_selectedNavIndex == 1) {
                   return InfoTab(
                     buildingCount: data.buildings.length,
                     roadCount: data.roads.length,
@@ -273,39 +274,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                 }
 
                 if (_selectedNavIndex == 4) {
-                  return YouTab(
-                    account: _account,
-                    registerMode: _registerMode,
-                    nameController: _authNameController,
-                    emailController: _authEmailController,
-                    passwordController: _authPasswordController,
-                    onToggleMode: () {
-                      setState(() => _registerMode = !_registerMode);
-                    },
-                    onSubmit: () {
-                      final email = _authEmailController.text.trim();
-                      final fallbackName = email.isEmpty
-                          ? 'Visitor'
-                          : email.split('@').first;
-                      setState(() {
-                        _account = UserAccount(
-                          name:
-                              _registerMode &&
-                                  _authNameController.text.trim().isNotEmpty
-                              ? _authNameController.text.trim()
-                              : fallbackName,
-                          email: email.isEmpty
-                              ? 'visitor@sabasaba.local'
-                              : email,
-                        );
-                        _authPasswordController.clear();
-                      });
-                    },
-                    onLogout: () {
-                      setState(() => _account = null);
-                    },
-                  );
+                  return const TicketsTab();
                 }
+
+                // Placeholder index (2) falls through to default map view.
 
                 return SafeArea(
                   bottom: false,
