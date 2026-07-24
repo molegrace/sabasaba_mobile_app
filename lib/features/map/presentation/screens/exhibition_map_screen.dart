@@ -199,6 +199,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     buildingCount: data.buildings.length,
                     roadCount: data.roads.length,
                     treeCount: data.trees.length,
+                    exhibition: data.exhibition,
                   );
                 }
 

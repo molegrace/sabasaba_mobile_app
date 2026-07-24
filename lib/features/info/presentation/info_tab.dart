@@ -1,30 +1,37 @@
-﻿part of '../../../main.dart';
+part of '../../../main.dart';
 
 class InfoTab extends StatelessWidget {
   const InfoTab({
     required this.buildingCount,
     required this.roadCount,
     required this.treeCount,
+    this.exhibition,
   });
 
   final int buildingCount;
   final int roadCount;
   final int treeCount;
+  final Exhibition? exhibition;
 
   @override
   Widget build(BuildContext context) {
+    final ex = exhibition;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
         children: [
           Text(
-            'SabaSaba Exhibition',
+            ex?.title ?? 'SabaSaba Exhibition',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w900,
               color: const Color(0xff0b4238),
             ),
           ),
           const SizedBox(height: 6),
+          if (ex != null) ...[
+            _ExhibitionStatusBadge(exhibition: ex),
+            const SizedBox(height: 6),
+          ],
           const Text(
             'Use the map to find areas, services, routes, and nearby landmarks.',
             style: TextStyle(color: Color(0xff40534d)),
@@ -52,6 +59,94 @@ class InfoTab extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _ExhibitionStatusBadge extends StatelessWidget {
+  const _ExhibitionStatusBadge({required this.exhibition});
+
+  final Exhibition exhibition;
+
+  @override
+  Widget build(BuildContext context) {
+    final isOngoing = exhibition.status == 'ongoing';
+    final statusColor = isOngoing ? const Color(0xff1aa987) : const Color(0xff6b7280);
+    final statusLabel = isOngoing ? 'Ongoing' : exhibition.status[0].toUpperCase() + exhibition.status.substring(1);
+
+    String? dateRange;
+    if (exhibition.startDate != null || exhibition.endDate != null) {
+      final parts = <String>[];
+      if (exhibition.startDate != null) parts.add(_formatDate(exhibition.startDate!));
+      if (exhibition.endDate != null) parts.add(_formatDate(exhibition.endDate!));
+      dateRange = parts.join(' – ');
+    }
+
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: statusColor.withOpacity(0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                statusLabel,
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (dateRange != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            dateRange,
+            style: const TextStyle(
+              color: Color(0xff40534d),
+              fontSize: 12,
+            ),
+          ),
+        ],
+        if (exhibition.year != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            '${exhibition.year}',
+            style: const TextStyle(
+              color: Color(0xff40534d),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _formatDate(String isoDate) {
+    try {
+      final date = DateTime.parse(isoDate);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${date.day} ${months[date.month - 1]}';
+    } catch (_) {
+      return isoDate;
+    }
   }
 }
 

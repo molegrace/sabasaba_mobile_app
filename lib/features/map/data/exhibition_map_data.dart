@@ -1,10 +1,43 @@
 part of '../../../main.dart';
 
+/// Lightweight metadata about the active exhibition fetched from Supabase.
+class Exhibition {
+  const Exhibition({
+    required this.id,
+    required this.title,
+    required this.status,
+    this.startDate,
+    this.endDate,
+    this.year,
+  });
+
+  final String id;
+  final String title;
+  final String status;
+  final String? startDate;
+  final String? endDate;
+  final int? year;
+
+  factory Exhibition.fromJson(Map<String, dynamic> json) {
+    return Exhibition(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? 'SabaSaba Exhibition',
+      status: json['status'] as String? ?? 'ongoing',
+      startDate: json['start_date'] as String?,
+      endDate: json['end_date'] as String?,
+      year: json['year'] as int?,
+    );
+  }
+}
+
 class ExhibitionMapData {
-  static const _mapCacheKey = 'sabasaba-exhibition-map-v1';
-  static final Uri _mapEndpoint = Uri.parse(
-    'https://sabasaba.alphabeti.co.tz/api/map',
-  );
+  static const _supabaseUrl = 'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1';
+  static const _supabaseKey = 'sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV';
+  static const _headers = {
+    'apikey': _supabaseKey,
+    'Authorization': 'Bearer $_supabaseKey',
+    'Accept': 'application/json',
+  };
 
   ExhibitionMapData({
     required this.buildings,
@@ -15,6 +48,7 @@ class ExhibitionMapData {
     required this.nodes,
     required this.edges,
     required this.locations,
+    this.exhibition,
   });
 
   final List<MapFeature> buildings;
@@ -25,245 +59,121 @@ class ExhibitionMapData {
   final List<RoutingNode> nodes;
   final List<RoutingEdge> edges;
   final List<RoutingLocation> locations;
+  /// Metadata about the active exhibition.
+  final Exhibition? exhibition;
 
+  // ---------------------------------------------------------------------------
+  // Load from Supabase — single source of truth, no API fallback
+  // ---------------------------------------------------------------------------
   static Future<ExhibitionMapData> load() async {
-    Map<String, dynamic> payload;
-    try {
-      final response = await http
-          .get(_mapEndpoint, headers: const {'accept': 'application/json'})
-          .timeout(const Duration(seconds: 10));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
-          'Map API returned ${response.statusCode} ${response.reasonPhrase ?? ''}'
-              .trim(),
-        );
-      }
-      payload = jsonDecode(response.body) as Map<String, dynamic>;
-      await DefaultCacheManager().putFile(
-        _mapEndpoint.toString(),
-        response.bodyBytes,
-        key: _mapCacheKey,
-        maxAge: const Duration(days: 365),
-        fileExtension: 'json',
-      );
-    } catch (networkError) {
-      final cached = await DefaultCacheManager().getFileFromCache(
-        _mapCacheKey,
-        ignoreMemCache: true,
-      );
-      if (cached == null) {
-        rethrow;
-      }
-      final cachedBytes = await cached.file.readAsBytes();
-      payload = jsonDecode(utf8.decode(cachedBytes)) as Map<String, dynamic>;
-    }
+    // 1. Find the latest ongoing or closed exhibition (not archived / draft)
+    final exhibitionResponse = await http
+        .get(
+          Uri.parse(
+            '$_supabaseUrl/exhibitions'
+            '?status=in.(ongoing,closed)&order=start_date.desc&limit=1&select=*',
+          ),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 10));
 
-    final data = payload['data'] as Map<String, dynamic>?;
-    final layers = data?['layers'] as List<dynamic>?;
-    if (layers == null) {
-      print('SabaSaba Map API Error: No layers found in payload: $payload');
-      throw const FormatException('Map API response does not contain layers.');
+    _assertOk(exhibitionResponse, 'exhibitions');
+    final exhibitionList =
+        jsonDecode(exhibitionResponse.body) as List<dynamic>;
+    if (exhibitionList.isEmpty) {
+      throw const FormatException(
+        'No ongoing or closed exhibition found in the database.',
+      );
     }
+    final exhibition =
+        Exhibition.fromJson(exhibitionList.first as Map<String, dynamic>);
+    print('SabaSaba - Active exhibition: ${exhibition.title} (${exhibition.status})');
 
+    // 2. Get the active map for this exhibition
+    final mapResponse = await http
+        .get(
+          Uri.parse(
+            '$_supabaseUrl/maps'
+            '?exhibition_id=eq.${exhibition.id}&is_active=eq.true&limit=1&select=id',
+          ),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 10));
+
+    _assertOk(mapResponse, 'maps');
+    final mapList = jsonDecode(mapResponse.body) as List<dynamic>;
+    if (mapList.isEmpty) {
+      throw FormatException(
+        'No active map found for exhibition "${exhibition.title}".',
+      );
+    }
+    final mapId = mapList.first['id'] as String;
+    print('SabaSaba - Map ID: $mapId');
+
+    // 3. Load all layers for this map
+    final layersResponse = await http
+        .get(
+          Uri.parse(
+            '$_supabaseUrl/layers?map_id=eq.$mapId&select=id,editor_key',
+          ),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 10));
+
+    _assertOk(layersResponse, 'layers');
+    final layerList = jsonDecode(layersResponse.body) as List<dynamic>;
     print(
-      'SabaSaba Map API - Available Layers: ${layers.map((l) => l?['id']).toList()}',
+      'SabaSaba - Layers: ${layerList.map((l) => l['editor_key']).toList()}',
     );
 
-    var buildings = <MapFeature>[];
-    final List<MapFeature> roads;
-    final List<MapFeature> trees;
-    final List<MapFeature> boundaries;
-
-    try {
-      final boothsFeatures = _loadFeatures(layers, 'booths', Layer.building);
-      final spacesFeatures = _loadFeatures(layers, 'spaces', Layer.building);
-      final buildingsFeatures = _loadFeatures(layers, 'buildings', Layer.building);
-      buildings = [...boothsFeatures, ...spacesFeatures, ...buildingsFeatures];
-
-      roads = _loadFeatures(layers, 'roads', Layer.road);
-      trees = _loadFeatures(layers, 'trees', Layer.tree);
-      boundaries = _loadFeatures(layers, 'boundary', Layer.boundary);
-    } catch (e, stackTrace) {
-      print('SabaSaba Map Parsing Failed: $e');
-      print('Stack trace: $stackTrace');
-      rethrow;
+    // Build a map of editor_key → layer id
+    final layerIdByKey = <String, String>{};
+    for (final item in layerList) {
+      final key = item['editor_key'] as String?;
+      final id = item['id'] as String?;
+      if (key != null && id != null) layerIdByKey[key] = id;
     }
 
-    // Fallback: If both booths and buildings layers have 0 features in the API response,
-    // fetch features of layers with editor_key in ('spaces', 'buildings', 'booths') directly from Supabase REST API!
-    if (buildings.isEmpty) {
-      try {
-        final headers = {
-          'apikey': 'sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV',
-          'Authorization':
-              'Bearer sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV',
-          'Accept': 'application/json',
-        };
+    // 4. Fetch all feature sets — typed futures kept separate to preserve types
+    final buildingLayerKeys = ['booths', 'spaces', 'buildings'];
+    final buildingLayerIds = buildingLayerKeys
+        .map((k) => layerIdByKey[k])
+        .whereType<String>()
+        .toList();
 
-        final mapResponse = await http
-            .get(
-              Uri.parse(
-                'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/maps?is_active=eq.true&select=id',
-              ),
-              headers: headers,
-            )
-            .timeout(const Duration(seconds: 5));
+    final roadLayerId = layerIdByKey['roads'];
+    final treeLayerId = layerIdByKey['trees'];
+    final boundaryLayerId = layerIdByKey['boundary'];
 
-        if (mapResponse.statusCode == 200) {
-          final mapsJson = jsonDecode(mapResponse.body) as List<dynamic>;
-          if (mapsJson.isNotEmpty) {
-            final mapId = mapsJson.first['id'] as String;
+    // Fetch features in parallel, keeping each future typed correctly
+    final buildingsFuture = _fetchFeatures(buildingLayerIds, Layer.building);
+    final roadsFuture = _fetchFeaturesForLayer(roadLayerId, Layer.road);
+    final treesFuture = _fetchFeaturesForLayer(treeLayerId, Layer.tree);
+    final boundariesFuture = _fetchFeaturesForLayer(boundaryLayerId, Layer.boundary);
+    final nodesFuture = _fetchNodes(mapId);
+    final edgesFuture = _fetchEdges(mapId);
 
-            final layerResponse = await http
-                .get(
-                  Uri.parse(
-                    'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/layers?map_id=eq.$mapId&editor_key=in.("spaces","buildings","booths")&select=id,editor_key',
-                  ),
-                  headers: headers,
-                )
-                .timeout(const Duration(seconds: 5));
+    // Await all in parallel
+    final buildings = await buildingsFuture;
+    final roads = await roadsFuture;
+    final trees = await treesFuture;
+    final boundaries = await boundariesFuture;
+    final nodes = await nodesFuture;
+    final edges = await edgesFuture;
 
-            if (layerResponse.statusCode == 200) {
-              final layersJson =
-                  jsonDecode(layerResponse.body) as List<dynamic>;
-
-              final targetLayerIds = <String>[];
-              for (final layerItem in layersJson) {
-                final editorKey = layerItem['editor_key'] as String?;
-                if (editorKey == 'spaces' || editorKey == 'buildings' || editorKey == 'booths') {
-                  targetLayerIds.add(layerItem['id'] as String);
-                }
-              }
-
-              if (targetLayerIds.isNotEmpty) {
-                final tempBuildings = <MapFeature>[];
-                for (final targetLayerId in targetLayerIds) {
-                  final featuresResponse = await http
-                      .get(
-                        Uri.parse(
-                          'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/features?layer_id=eq.$targetLayerId&select=id,geometry,properties',
-                        ),
-                        headers: headers,
-                      )
-                      .timeout(const Duration(seconds: 5));
-
-                  if (featuresResponse.statusCode == 200) {
-                    final featuresJson =
-                        jsonDecode(featuresResponse.body) as List<dynamic>;
-                    tempBuildings.addAll([
-                      for (var i = 0; i < featuresJson.length; i++)
-                        MapFeature.fromJson(
-                          featuresJson[i] as Map<String, dynamic>,
-                          Layer.building,
-                          tempBuildings.length + i,
-                        ),
-                    ]);
-                  }
-                }
-                buildings = tempBuildings;
-                print(
-                  'SabaSaba Map API - Fallback fetched ${buildings.length} building features from Supabase REST.',
-                );
-              }
-            }
-          }
-        }
-      } catch (e) {
-        print('Supabase buildings fallback failed: $e');
-      }
-    }
+    print('SabaSaba - buildings: ${buildings.length}, roads: ${roads.length}, '
+        'trees: ${trees.length}, boundaries: ${boundaries.length}');
+    print('SabaSaba - nodes: ${nodes.length}, edges: ${edges.length}');
 
     final allPoints = [
-      for (final feature in [...buildings, ...roads, ...trees, ...boundaries])
-        ...feature.allPoints,
+      for (final f in [...buildings, ...roads, ...trees, ...boundaries])
+        ...f.allPoints,
     ];
     if (allPoints.isEmpty) {
-      throw const FormatException('Map API returned no renderable geometry.');
+      throw const FormatException('Map returned no renderable geometry.');
     }
 
-    // Parse routing nodes and edges
-    final routingNodesRaw = data?['routingNodes'] as List<dynamic>? ?? const [];
-    var nodes = routingNodesRaw
-        .map((item) => RoutingNode.fromJson(item as Map<String, dynamic>))
-        .toList();
-
-    final routingEdgesRaw = data?['routingEdges'] as List<dynamic>? ?? const [];
-    var edges = routingEdgesRaw
-        .map((item) => RoutingEdge.fromJson(item as Map<String, dynamic>))
-        .toList();
-
-    // Fallback: Query Supabase REST API directly if routing graph is missing from map API response
-    if (nodes.isEmpty) {
-      try {
-        final headers = {
-          'apikey': 'sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV',
-          'Authorization':
-              'Bearer sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV',
-          'Accept': 'application/json',
-        };
-
-        // 1. Get active map ID
-        final mapResponse = await http
-            .get(
-              Uri.parse(
-                'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/maps?is_active=eq.true&select=id',
-              ),
-              headers: headers,
-            )
-            .timeout(const Duration(seconds: 5));
-
-        if (mapResponse.statusCode == 200) {
-          final mapsJson = jsonDecode(mapResponse.body) as List<dynamic>;
-          if (mapsJson.isNotEmpty) {
-            final mapId = mapsJson.first['id'] as String;
-
-            // 2. Fetch routing nodes
-            final nodesResponse = await http
-                .get(
-                  Uri.parse(
-                    'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/routing_nodes?map_id=eq.$mapId&select=id,latitude,longitude',
-                  ),
-                  headers: headers,
-                )
-                .timeout(const Duration(seconds: 5));
-
-            if (nodesResponse.statusCode == 200) {
-              final nodesJson = jsonDecode(nodesResponse.body) as List<dynamic>;
-              nodes = nodesJson
-                  .map(
-                    (item) =>
-                        RoutingNode.fromJson(item as Map<String, dynamic>),
-                  )
-                  .toList();
-            }
-
-            // 3. Fetch routing edges
-            final edgesResponse = await http
-                .get(
-                  Uri.parse(
-                    'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1/routing_edges?map_id=eq.$mapId&select=id,source_node_id,target_node_id,distance,bidirectional',
-                  ),
-                  headers: headers,
-                )
-                .timeout(const Duration(seconds: 5));
-
-            if (edgesResponse.statusCode == 200) {
-              final edgesJson = jsonDecode(edgesResponse.body) as List<dynamic>;
-              edges = edgesJson
-                  .map(
-                    (item) =>
-                        RoutingEdge.fromJson(item as Map<String, dynamic>),
-                  )
-                  .toList();
-            }
-          }
-        }
-      } catch (e) {
-        print('Supabase REST fallback failed: $e');
-      }
-    }
-
-    // Map locations
+    // 5. Build routing locations from building centroids
     final locations = <RoutingLocation>[];
     if (nodes.isNotEmpty) {
       for (final building in buildings) {
@@ -282,11 +192,6 @@ class ExhibitionMapData {
       locations.sort((a, b) => a.label.compareTo(b.label));
     }
 
-    print('SabaSaba Map API - parsed buildings count: ${buildings.length}');
-    print('SabaSaba Map API - parsed nodes count: ${nodes.length}');
-    print('SabaSaba Map API - parsed edges count: ${edges.length}');
-    print('SabaSaba Map API - parsed locations count: ${locations.length}');
-
     return ExhibitionMapData(
       buildings: buildings,
       roads: roads,
@@ -296,48 +201,109 @@ class ExhibitionMapData {
       nodes: nodes,
       edges: edges,
       locations: locations,
+      exhibition: exhibition,
     );
   }
 
-  static List<MapFeature> _loadFeatures(
-    List<dynamic> layers,
-    String layerId,
-    Layer layer,
-  ) {
-    final layerJson = layers.cast<Map<String, dynamic>?>().firstWhere(
-      (item) => item?['id'] == layerId,
-      orElse: () => null,
-    );
-    if (layerJson == null) {
-      print('SabaSaba Map Warning: Layer $layerId not found in API response.');
-      return const [];
-    }
-    final geoJson = layerJson['geojson'] as Map<String, dynamic>?;
-    if (geoJson == null) {
-      print('SabaSaba Map Warning: Layer $layerId is missing geojson object.');
-      return const [];
-    }
-    final features = geoJson['features'] as List<dynamic>?;
-    if (features == null) {
-      print('SabaSaba Map Warning: Layer $layerId is missing features array.');
-      return const [];
-    }
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
 
+  /// Fetches features from multiple layer IDs, merging them into one list.
+  static Future<List<MapFeature>> _fetchFeatures(
+    List<String> layerIds,
+    Layer layer,
+  ) async {
+    final result = <MapFeature>[];
+    for (final layerId in layerIds) {
+      final fetched = await _fetchFeaturesForLayer(layerId, layer,
+          indexOffset: result.length);
+      result.addAll(fetched);
+    }
+    return result;
+  }
+
+  /// Fetches features for a single layer ID (returns [] if layerId is null).
+  static Future<List<MapFeature>> _fetchFeaturesForLayer(
+    String? layerId,
+    Layer layer, {
+    int indexOffset = 0,
+  }) async {
+    if (layerId == null) return [];
+    final response = await http
+        .get(
+          Uri.parse(
+            '$_supabaseUrl/features'
+            '?layer_id=eq.$layerId&select=id,geometry,properties',
+          ),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 10));
+    _assertOk(response, 'features[$layerId]');
+    final list = jsonDecode(response.body) as List<dynamic>;
     return [
-      for (var i = 0; i < features.length; i++)
-        MapFeature.fromJson(features[i] as Map<String, dynamic>, layer, i),
+      for (var i = 0; i < list.length; i++)
+        MapFeature.fromJson(
+          list[i] as Map<String, dynamic>,
+          layer,
+          indexOffset + i,
+        ),
     ];
   }
 
+  static Future<List<RoutingNode>> _fetchNodes(String mapId) async {
+    final response = await http
+        .get(
+          Uri.parse(
+            '$_supabaseUrl/routing_nodes'
+            '?map_id=eq.$mapId&select=id,latitude,longitude',
+          ),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 10));
+    _assertOk(response, 'routing_nodes');
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list
+        .map((item) => RoutingNode.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  static Future<List<RoutingEdge>> _fetchEdges(String mapId) async {
+    final response = await http
+        .get(
+          Uri.parse(
+            '$_supabaseUrl/routing_edges'
+            '?map_id=eq.$mapId'
+            '&select=id,source_node_id,target_node_id,distance,bidirectional',
+          ),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 10));
+    _assertOk(response, 'routing_edges');
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list
+        .map((item) => RoutingEdge.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  static void _assertOk(http.Response response, String label) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Supabase $label returned ${response.statusCode}: ${response.body}',
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Map query helpers (used by the map screen)
+  // ---------------------------------------------------------------------------
+
   List<MapFeature> searchBuildings(String query) {
     final normalized = query.trim().toLowerCase();
-    if (normalized.isEmpty) {
-      return buildings;
-    }
-
-    return buildings.where((feature) {
-      return feature.searchText.contains(normalized);
-    }).toList();
+    if (normalized.isEmpty) return buildings;
+    return buildings
+        .where((f) => f.searchText.contains(normalized))
+        .toList();
   }
 
   MapFeature? hitTest(Offset scenePoint, Size size) {
@@ -353,9 +319,7 @@ class ExhibitionMapData {
             path.lineTo(point.dx, point.dy);
           }
         }
-        if ((path..close()).contains(scenePoint)) {
-          return building;
-        }
+        if ((path..close()).contains(scenePoint)) return building;
       }
     }
     return null;
