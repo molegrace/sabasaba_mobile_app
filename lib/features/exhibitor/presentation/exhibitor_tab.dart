@@ -1,7 +1,7 @@
 ﻿part of '../../../main.dart';
 
 class ExhibitorTab extends StatelessWidget {
-  const ExhibitorTab({
+  const ExhibitorTab({super.key, 
     required this.account,
     required this.registerMode,
     required this.nameController,
@@ -91,7 +91,7 @@ class ExhibitorTab extends StatelessWidget {
 }
 
 class ExhibitorLoginCard extends StatelessWidget {
-  const ExhibitorLoginCard({
+  const ExhibitorLoginCard({super.key, 
     required this.registerMode,
     required this.nameController,
     required this.emailController,
@@ -158,7 +158,7 @@ class ExhibitorLoginCard extends StatelessWidget {
 }
 
 class ExhibitorHeader extends StatelessWidget {
-  const ExhibitorHeader({required this.account, required this.onLogout});
+  const ExhibitorHeader({super.key, required this.account, required this.onLogout});
 
   final UserAccount account;
   final VoidCallback onLogout;
@@ -209,7 +209,7 @@ class ExhibitorHeader extends StatelessWidget {
 }
 
 class ExhibitorBoothCard extends StatelessWidget {
-  const ExhibitorBoothCard({
+  const ExhibitorBoothCard({super.key, 
     required this.boothName,
     required this.controller,
     required this.onSave,
@@ -247,7 +247,7 @@ class ExhibitorBoothCard extends StatelessWidget {
 }
 
 class ExhibitorProductsCard extends StatelessWidget {
-  const ExhibitorProductsCard({
+  const ExhibitorProductsCard({super.key, 
     required this.products,
     required this.controller,
     required this.onAdd,
@@ -297,7 +297,7 @@ class ExhibitorProductsCard extends StatelessWidget {
 }
 
 class ExhibitorInquiryCard extends StatelessWidget {
-  const ExhibitorInquiryCard({
+  const ExhibitorInquiryCard({super.key, 
     required this.inquiries,
     required this.replyController,
     required this.onReply,
@@ -329,7 +329,7 @@ class ExhibitorInquiryCard extends StatelessWidget {
 }
 
 class InquiryTile extends StatelessWidget {
-  const InquiryTile({
+  const InquiryTile({super.key, 
     required this.inquiry,
     required this.replyController,
     required this.onReply,
@@ -386,7 +386,7 @@ class InquiryTile extends StatelessWidget {
 }
 
 class ExhibitorSection extends StatelessWidget {
-  const ExhibitorSection({
+  const ExhibitorSection({super.key, 
     required this.icon,
     required this.title,
     required this.child,
