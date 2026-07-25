@@ -1,4 +1,4 @@
-﻿part of '../../../main.dart';
+part of '../../../main.dart';
 
 class RoutingNode {
   final String id;
@@ -53,12 +53,17 @@ class RouteResult {
   RouteResult({required this.nodeIds, required this.distance});
 }
 
+/// A navigable location derived from a map feature.
+/// Includes rich metadata for the navigator detail panel.
 class RoutingLocation {
-  final String id;
+  final String id; // database feature UUID
   final String label;
   final String description;
   final GeoPoint position;
   final String nodeId;
+  final String layerName;
+  final String? companyName;
+  final Map<String, dynamic> properties;
 
   RoutingLocation({
     required this.id,
@@ -66,6 +71,9 @@ class RoutingLocation {
     required this.description,
     required this.position,
     required this.nodeId,
+    this.layerName = '',
+    this.companyName,
+    this.properties = const {},
   });
 }
 
@@ -153,4 +161,11 @@ RouteResult? shortestPath(
   }
 
   return RouteResult(nodeIds: nodeIds, distance: distance);
+}
+
+/// Returns walking time label for a distance in meters.
+/// Matches the web navigator's walkingTimeLabel function.
+String walkingTimeLabel(double distanceMeters) {
+  final minutes = math.max(1, (distanceMeters / (5000 / 60)).ceil());
+  return '~$minutes minute${minutes == 1 ? '' : 's'}';
 }

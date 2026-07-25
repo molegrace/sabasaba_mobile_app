@@ -175,19 +175,24 @@ class ExhibitionMapPainter extends CustomPainter {
     }
 
     for (final building in data.buildings) {
-      final paint = Paint()
+      final isSelected = selectedArea != null &&
+          (selectedArea!.featureId != null
+              ? selectedArea!.featureId == building.featureId
+              : selectedArea!.key == building.key);
+      final isFiltered = filteredIds.contains(building.key);
+
+      final buildingColor = building.rawProperties['company_name'] != null
+          ? const Color(0xff1aa987) // allocated exhibitor: teal
+          : const Color(0xffb0b0b0); // unallocated: gray
+
+      final fillPaint = Paint()
         ..style = PaintingStyle.fill
-        ..color = const Color(0xffb0b0b0);
+        ..color = isSelected ? const Color(0xff0d9488) : buildingColor;
 
       for (final polygon in building.polygons) {
         final path = _polygonPath(polygon, projection);
-        canvas.drawPath(path, paint);
+        canvas.drawPath(path, fillPaint);
       }
-    }
-
-    for (final building in data.buildings) {
-      final isSelected = selectedArea?.key == building.key;
-      final isFiltered = filteredIds.contains(building.key);
       final stroke = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.5
@@ -222,31 +227,31 @@ class ExhibitionMapPainter extends CustomPainter {
 
       if (routePoints.isNotEmpty) {
         final routePaint = Paint()
-          ..color = const Color(0xff4a90e2)
+          ..color = const Color(0xff0284c7) // sky-600 - matches web
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.6
+          ..strokeWidth = 1.8
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round;
 
         _drawDashedPolyline(canvas, routePoints, routePaint);
 
-        // Paint the start as a blue dot.
+        // Paint start as an emerald dot (matching web's emerald-500).
         final startOffset = projection.project(startPoint!);
-        canvas.drawCircle(startOffset, 3, Paint()..color = Colors.white);
+        canvas.drawCircle(startOffset, 5, Paint()..color = Colors.white);
         canvas.drawCircle(
           startOffset,
-          2.5,
-          Paint()..color = const Color(0xff1976d2),
+          4,
+          Paint()..color = const Color(0xff10b981), // emerald-500
         );
 
-        // Paint the destination as a red location pin whose tip marks the point.
+        // Paint the destination as a rose location pin (matching web's rose-500).
         final endOffset = projection.project(endPoint!);
         final destinationPainter = TextPainter(
           text: TextSpan(
             text: String.fromCharCode(Icons.location_pin.codePoint),
             style: TextStyle(
-              color: const Color(0xffd32f2f),
-              fontSize: 14,
+              color: const Color(0xfff43f5e), // rose-500 - matches web
+              fontSize: 16,
               fontFamily: Icons.location_pin.fontFamily,
               package: Icons.location_pin.fontPackage,
             ),

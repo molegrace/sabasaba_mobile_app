@@ -1,6 +1,5 @@
 part of '../../../../main.dart';
 
-
 class ExhibitionMapScreen extends StatefulWidget {
   const ExhibitionMapScreen({super.key, this.mapData});
 
@@ -12,7 +11,6 @@ class ExhibitionMapScreen extends StatefulWidget {
 
 class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _searchController = TextEditingController();
   final TextEditingController _authNameController = TextEditingController();
   final TextEditingController _authEmailController = TextEditingController();
   final TextEditingController _authPasswordController = TextEditingController();
@@ -23,7 +21,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   final TextEditingController _boothNameController = TextEditingController();
   final TextEditingController _productController = TextEditingController();
   final TextEditingController _replyController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
+  final TextEditingController _searchController = TextEditingController();
   final TransformationController _transformController =
       TransformationController();
   final GlobalKey _mapViewportKey = GlobalKey();
@@ -36,16 +34,27 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   bool _isOffline = false;
   bool _showConnectionBanner = false;
   int _tileRefreshGeneration = 0;
-  String _query = '';
-  bool _searchFocused = false;
-  double _mapRotation = 0;
-  double _gestureRotationStart = 0;
-  int _selectedNavIndex = 0;
-  bool _registerMode = false;
+
+  // ─── Navigator state ────────────────────────────────────────────────────────
+  String _searchQuery = '';
+  String _categoryFilter = 'all';
+  bool _isLeftOpen = false;
+  String? _activePanel; // null | 'spaces' | 'route' | 'details' | 'help'
+  bool _showLegend = false;
+  SelectedFeatureInfo? _selectedFeatureInfo;
+  MapFeature? _selectedAreaForCanvas;
+
+  // Route state
+  String _startLocationId = '';
+  String _endLocationId = '';
+  RouteResult? _currentRoute;
+  String? _routeNotice;
+
+  // ─── Other tab state ────────────────────────────────────────────────────────
+  int _selectedNavIndex = 2; // default to map (index 2)
   bool _exhibitorRegisterMode = false;
   bool _locationAllowed = false;
   MapTileStyle _tileStyle = MapTileStyle.openStreetMap;
-  UserAccount? _account;
   UserAccount? _exhibitorAccount;
   String _boothName = 'SabaSaba Exhibitor Booth';
   final List<String> _exhibitorProducts = [
@@ -62,43 +71,33 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       message: 'What time will the product demo start?',
     ),
   ];
-  MapFeature? _selectedArea;
   VisitorService? _selectedService;
-  bool _routingMode = false;
-  bool _routeMinimized = false;
-  String _startLocationId = '';
-  String _endLocationId = '';
-  RouteResult? _currentRoute;
-  String? _routeNotice;
+  double _mapRotation = 0;
+  double _gestureRotationStart = 0;
 
   @override
   void initState() {
     super.initState();
-    _mapAnimationController =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 1400),
-        )..addListener(() {
-          final animation = _mapAnimation;
-          if (animation != null) {
-            _transformController.value = animation.value;
-          }
-        });
+    _mapAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..addListener(() {
+        final animation = _mapAnimation;
+        if (animation != null) {
+          _transformController.value = animation.value;
+        }
+      });
     _mapFuture = widget.mapData ?? ExhibitionMapData.load();
     if (widget.mapData == null) {
       _monitorConnectivity();
     }
     _boothNameController.text = _boothName;
-    _searchFocusNode.addListener(() {
-      setState(() => _searchFocused = _searchFocusNode.hasFocus);
-    });
   }
 
   @override
   void dispose() {
     _connectivitySubscription?.cancel();
     _connectionBannerTimer?.cancel();
-    _searchController.dispose();
     _authNameController.dispose();
     _authEmailController.dispose();
     _authPasswordController.dispose();
@@ -107,7 +106,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     _boothNameController.dispose();
     _productController.dispose();
     _replyController.dispose();
-    _searchFocusNode.dispose();
+    _searchController.dispose();
     _mapAnimationController.dispose();
     _transformController.dispose();
     super.dispose();
@@ -119,34 +118,33 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedNavIndex,
         onDestinationSelected: (index) {
-          _searchFocusNode.unfocus();
           setState(() => _selectedNavIndex = index);
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map),
-            label: 'Explore',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.badge_outlined),
-            selectedIcon: Icon(Icons.badge),
-            label: 'Booths',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.event_outlined),
-            selectedIcon: Icon(Icons.event),
-            label: 'Tickets',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.storefront_outlined),
             selectedIcon: Icon(Icons.storefront),
-            label: 'Facilities',
+            label: 'Services',
           ),
           NavigationDestination(
             icon: Icon(Icons.info_outline),
             selectedIcon: Icon(Icons.info),
             label: 'Info',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.map_outlined),
+            selectedIcon: Icon(Icons.map),
+            label: 'Navigator',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.badge_outlined),
+            selectedIcon: Icon(Icons.badge),
+            label: 'Exhibitor',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.event_outlined),
+            selectedIcon: Icon(Icons.event),
+            label: 'Tickets',
           ),
         ],
       ),
@@ -168,24 +166,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                 if (snapshot.hasError) {
                   return MapError(message: snapshot.error.toString());
                 }
-
                 if (!snapshot.hasData) {
                   return const LoadingMap();
                 }
 
                 final data = snapshot.data!;
-                final visibleAreas = data.searchBuildings(_query);
-                final activeArea =
-                    _selectedArea != null &&
-                        visibleAreas.contains(_selectedArea)
-                    ? _selectedArea
-                    : visibleAreas.length == 1
-                    ? visibleAreas.first
-                    : _selectedArea;
-                final modalArea = _selectedService == null
-                    ? _selectedArea
-                    : null;
 
+                // ── Non-map tabs ──────────────────────────────────────────────
                 if (_selectedNavIndex == 0) {
                   return ServicesTab(
                     areas: data.buildings,
@@ -193,7 +180,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     onSelectService: _openService,
                   );
                 }
-
                 if (_selectedNavIndex == 1) {
                   return InfoTab(
                     buildingCount: data.buildings.length,
@@ -202,7 +188,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     exhibition: data.exhibition,
                   );
                 }
-
                 if (_selectedNavIndex == 3) {
                   return ExhibitorTab(
                     account: _exhibitorAccount,
@@ -215,23 +200,17 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     boothName: _boothName,
                     products: _exhibitorProducts,
                     inquiries: _visitorInquiries,
-                    onToggleMode: () {
-                      setState(
-                        () => _exhibitorRegisterMode = !_exhibitorRegisterMode,
-                      );
-                    },
+                    onToggleMode: () => setState(
+                      () => _exhibitorRegisterMode = !_exhibitorRegisterMode,
+                    ),
                     onSubmit: () {
                       final email = _exhibitorEmailController.text.trim();
-                      final fallbackName = email.isEmpty
-                          ? 'Exhibitor'
-                          : email.split('@').first;
+                      final fallbackName =
+                          email.isEmpty ? 'Exhibitor' : email.split('@').first;
                       setState(() {
                         _exhibitorAccount = UserAccount(
-                          name:
-                              _exhibitorRegisterMode &&
-                                  _exhibitorNameController.text
-                                      .trim()
-                                      .isNotEmpty
+                          name: _exhibitorRegisterMode &&
+                                  _exhibitorNameController.text.trim().isNotEmpty
                               ? _exhibitorNameController.text.trim()
                               : fallbackName,
                           email: email.isEmpty
@@ -242,16 +221,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     },
                     onSaveBooth: () {
                       final value = _boothNameController.text.trim();
-                      if (value.isEmpty) {
-                        return;
-                      }
+                      if (value.isEmpty) return;
                       setState(() => _boothName = value);
                     },
                     onAddProduct: () {
                       final value = _productController.text.trim();
-                      if (value.isEmpty) {
-                        return;
-                      }
+                      if (value.isEmpty) return;
                       setState(() {
                         _exhibitorProducts.add(value);
                         _productController.clear();
@@ -259,293 +234,22 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     },
                     onReply: (index) {
                       final reply = _replyController.text.trim();
-                      if (reply.isEmpty) {
-                        return;
-                      }
+                      if (reply.isEmpty) return;
                       setState(() {
-                        _visitorInquiries[index] = _visitorInquiries[index]
-                            .copyWith(response: reply);
+                        _visitorInquiries[index] =
+                            _visitorInquiries[index].copyWith(response: reply);
                         _replyController.clear();
                       });
                     },
-                    onLogout: () {
-                      setState(() => _exhibitorAccount = null);
-                    },
+                    onLogout: () => setState(() => _exhibitorAccount = null),
                   );
                 }
-
                 if (_selectedNavIndex == 4) {
                   return const TicketsTab();
                 }
 
-                // Placeholder index (2) falls through to default map view.
-
-                return SafeArea(
-                  bottom: false,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final wide = constraints.maxWidth >= 760;
-                      final searchShowingResults =
-                          _searchFocused && _query.trim().isNotEmpty;
-                      final panel = SearchPanel(
-                        query: _query,
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        areas: visibleAreas,
-                        selectedArea: activeArea,
-                        showResults: searchShowingResults,
-                        onQueryChanged: (value) {
-                          setState(() {
-                            _query = value;
-                            if (value.isEmpty) {
-                              _selectedArea = null;
-                            }
-                          });
-                        },
-                        onSelectArea: (area) {
-                          setState(() {
-                            _selectedArea = area;
-                            _selectedService = null;
-                          });
-                          _searchFocusNode.unfocus();
-                        },
-                        onClear: () {
-                          _searchController.clear();
-                          setState(() {
-                            _query = '';
-                            _selectedArea = null;
-                            _selectedService = null;
-                          });
-                        },
-                      );
-
-                      return Stack(
-                        children: [
-                          Positioned.fill(
-                            child: SizedBox(
-                              key: _mapViewportKey,
-                              child: MapCanvas(
-                                data: data,
-                                filteredAreas: visibleAreas,
-                                selectedArea: activeArea,
-                                selectedService: _selectedService,
-                                tileStyle: _tileStyle,
-                                tileRefreshGeneration: _tileRefreshGeneration,
-                                rotation: _mapRotation,
-                                controller: _transformController,
-                                onRotationStart: () {
-                                  _gestureRotationStart = _mapRotation;
-                                },
-                                onRotationUpdate: (angle) {
-                                  setState(() {
-                                    _mapRotation =
-                                        _gestureRotationStart + angle;
-                                  });
-                                },
-                                onDoubleTap: () => _zoom(0.82),
-                                onSelectArea: (area) {
-                                  if (!_routingMode) {
-                                    setState(() {
-                                      _selectedArea = area;
-                                      _selectedService = null;
-                                    });
-                                    _searchFocusNode.unfocus();
-                                  }
-                                },
-                                route: _currentRoute,
-                                startPoint:
-                                    _currentRoute == null ||
-                                        _startLocationId.isEmpty
-                                    ? null
-                                    : data.locations
-                                          .firstWhere(
-                                            (loc) => loc.id == _startLocationId,
-                                            orElse: () => data.locations.first,
-                                          )
-                                          .position,
-                                endPoint:
-                                    _currentRoute == null ||
-                                        _endLocationId.isEmpty
-                                    ? null
-                                    : data.locations
-                                          .firstWhere(
-                                            (loc) => loc.id == _endLocationId,
-                                            orElse: () => data.locations.first,
-                                          )
-                                          .position,
-                              ),
-                            ),
-                          ),
-                          if (modalArea != null && !_routingMode)
-                            Positioned.fill(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.translucent,
-                                onTap: () {
-                                  setState(() => _selectedArea = null);
-                                },
-                              ),
-                            ),
-                          Positioned(
-                            left: 16,
-                            right: wide ? null : 16,
-                            top: 14,
-                            width: wide ? 350 : null,
-                            child: _routingMode
-                                ? (_routeMinimized
-                                      ? MinimizedRouteHeader(
-                                          startLabel: data.locations
-                                              .firstWhere(
-                                                (loc) =>
-                                                    loc.id == _startLocationId,
-                                                orElse: () =>
-                                                    data.locations.first,
-                                              )
-                                              .label,
-                                          endLabel: data.locations
-                                              .firstWhere(
-                                                (loc) =>
-                                                    loc.id == _endLocationId,
-                                                orElse: () =>
-                                                    data.locations.first,
-                                              )
-                                              .label,
-                                          distance:
-                                              _currentRoute?.distance ?? 0.0,
-                                          onEdit: () {
-                                            setState(
-                                              () => _routeMinimized = false,
-                                            );
-                                          },
-                                          onClose: () {
-                                            _clearRoute();
-                                          },
-                                        )
-                                      : RouteInputPanel(
-                                          locations: data.locations,
-                                          startId: _startLocationId,
-                                          endId: _endLocationId,
-                                          notice: _routeNotice,
-                                          onStartChanged: (id) {
-                                            setState(() {
-                                              _startLocationId = id;
-                                              _currentRoute = null;
-                                              _routeMinimized = false;
-                                            });
-                                          },
-                                          onEndChanged: (id) {
-                                            setState(() {
-                                              _endLocationId = id;
-                                              _currentRoute = null;
-                                              _routeMinimized = false;
-                                            });
-                                          },
-                                          onFindRoute: () =>
-                                              _calculateRoute(data),
-                                          onSwap: _swapLocations,
-                                          onBack: () {
-                                            setState(() {
-                                              _routingMode = false;
-                                              _clearRoute();
-                                            });
-                                          },
-                                        ))
-                                : panel,
-                          ),
-                          if (modalArea != null && !wide && !_routingMode)
-                            Positioned(
-                              left: 16,
-                              right: 16,
-                              bottom: 14,
-                              child: SelectedAreaModal(
-                                area: modalArea,
-                                onClose: () {
-                                  setState(() => _selectedArea = null);
-                                },
-                              ),
-                            ),
-                          if (modalArea != null && wide && !_routingMode)
-                            Positioned(
-                              right: 18,
-                              bottom: 18,
-                              width: 310,
-                              child: SelectedAreaModal(
-                                area: modalArea,
-                                onClose: () {
-                                  setState(() => _selectedArea = null);
-                                },
-                              ),
-                            ),
-                          if (_selectedService != null &&
-                              !wide &&
-                              !_routingMode)
-                            Positioned(
-                              left: 16,
-                              right: 16,
-                              bottom: 14,
-                              child: SelectedServiceNavigationCard(
-                                service: _selectedService!,
-                                onClose: () {
-                                  setState(() => _selectedService = null);
-                                },
-                              ),
-                            ),
-                          if (_selectedService != null && wide && !_routingMode)
-                            Positioned(
-                              right: 18,
-                              bottom: 18,
-                              width: 310,
-                              child: SelectedServiceNavigationCard(
-                                service: _selectedService!,
-                                onClose: () {
-                                  setState(() => _selectedService = null);
-                                },
-                              ),
-                            ),
-                          if (wide || !searchShowingResults)
-                            AnimatedPositioned(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                              right: 16,
-                              top: wide
-                                  ? 14
-                                  : (_routingMode && !_routeMinimized
-                                        ? 260.0
-                                        : 98.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  MapControls(
-                                    tileStyle: _tileStyle,
-                                    onTileStyleChanged: (style) {
-                                      setState(() => _tileStyle = style);
-                                    },
-                                    onLocateMe: _locateMe,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  CompassControl(rotation: _mapRotation),
-                                  if (!_routingMode) ...[
-                                    const SizedBox(height: 12),
-                                    FloatingActionButton(
-                                      mini: true,
-                                      backgroundColor: const Color(0xff0b4238),
-                                      foregroundColor: Colors.white,
-                                      onPressed: () {
-                                        setState(() {
-                                          _routingMode = true;
-                                          _routeMinimized = false;
-                                        });
-                                      },
-                                      child: const Icon(Icons.directions),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                );
+                // ── Navigator Map View (index 2) ─────────────────────────────
+                return _buildMapView(data);
               },
             ),
           ),
@@ -554,47 +258,569 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     );
   }
 
-  Future<void> _monitorConnectivity() async {
-    final connectivity = Connectivity();
-    _connectivitySubscription = connectivity.onConnectivityChanged.listen(
-      _updateConnectivity,
+  // ─── Build the full navigator map view ────────────────────────────────────
+  Widget _buildMapView(ExhibitionMapData data) {
+    // Compute category data for SpacesPanel
+    final categoryCounts = <String, int>{
+      'all': data.locations.length,
+      'exhibitors': 0,
+    };
+    for (final loc in data.locations) {
+      if (loc.companyName != null) {
+        categoryCounts['exhibitors'] =
+            (categoryCounts['exhibitors'] ?? 0) + 1;
+      }
+      if (loc.layerName.isNotEmpty) {
+        categoryCounts[loc.layerName] =
+            (categoryCounts[loc.layerName] ?? 0) + 1;
+      }
+    }
+
+    final availableCategories = <_CategoryItem>[
+      _CategoryItem(id: 'all', label: 'All', count: categoryCounts['all'] ?? 0),
+      if ((categoryCounts['exhibitors'] ?? 0) > 0)
+        _CategoryItem(
+          id: 'exhibitors',
+          label: 'Exhibitors',
+          count: categoryCounts['exhibitors']!,
+        ),
+      ...categoryCounts.entries
+          .where(
+            (e) => e.key != 'all' && e.key != 'exhibitors' && e.value > 0,
+          )
+          .map((e) => _CategoryItem(id: e.key, label: e.key, count: e.value)),
+    ];
+
+    final filteredLocations = data.locations.where((loc) {
+      final matchesSearch = _searchQuery.trim().isEmpty ||
+          loc.label.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          loc.description.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (loc.companyName?.toLowerCase().contains(_searchQuery.toLowerCase()) ??
+              false);
+      if (!matchesSearch) return false;
+      if (_categoryFilter == 'all') return true;
+      if (_categoryFilter == 'exhibitors') return loc.companyName != null;
+      return loc.layerName == _categoryFilter;
+    }).toList();
+
+    // Start/end labels for info bar
+    final startLoc = _findLocation(data.locations, _startLocationId);
+    final endLoc = _findLocation(data.locations, _endLocationId);
+
+    return SafeArea(
+      bottom: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isDesktop = constraints.maxWidth >= 600;
+          final searchShowingResults =
+              _searchQuery.trim().isNotEmpty && _activePanel == 'spaces';
+
+          return Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              // ── 1. Map canvas (fills full viewport) ─────────────────────────
+              Positioned.fill(
+                child: SizedBox(
+                  key: _mapViewportKey,
+                  child: MapCanvas(
+                    data: data,
+                    filteredAreas: searchShowingResults
+                        ? data.searchBuildings(_searchQuery)
+                        : data.buildings,
+                    selectedArea: _selectedAreaForCanvas,
+                    selectedService: _selectedService,
+                    tileStyle: _tileStyle,
+                    tileRefreshGeneration: _tileRefreshGeneration,
+                    rotation: _mapRotation,
+                    controller: _transformController,
+                    onRotationStart: () {
+                      _gestureRotationStart = _mapRotation;
+                    },
+                    onRotationUpdate: (angle) {
+                      setState(() {
+                        _mapRotation = _gestureRotationStart + angle;
+                      });
+                    },
+                    onDoubleTap: () => _zoom(0.82),
+                    onSelectArea: (area) => _onCanvasTap(area, data),
+                    route: _currentRoute,
+                    startPoint: (_currentRoute != null &&
+                            _startLocationId.isNotEmpty)
+                        ? _findLocation(data.locations, _startLocationId)
+                              ?.position
+                        : null,
+                    endPoint: (_currentRoute != null &&
+                            _endLocationId.isNotEmpty)
+                        ? _findLocation(data.locations, _endLocationId)
+                              ?.position
+                        : null,
+                  ),
+                ),
+              ),
+
+              // ── 2. Main panel overlay (when active) ─────────────────────────
+              if (_activePanel != null)
+                NavigatorMainPanel(
+                  title: _panelTitle(data),
+                  onClose: () => setState(() => _activePanel = null),
+                  child: _buildPanelContent(
+                    data,
+                    availableCategories,
+                    filteredLocations,
+                  ),
+                ),
+
+              // ── 3. Right toolbar (always on desktop, hidden on mobile when panel open)
+              if (isDesktop || _activePanel == null)
+                Positioned(
+                  right: 14,
+                  top: 14,
+                  child: NavigatorRightToolbar(
+                    tileStyle: _tileStyle,
+                    onTileStyleChanged: (s) => setState(() => _tileStyle = s),
+                    showLegend: _showLegend,
+                    onToggleLegend: () =>
+                        setState(() => _showLegend = !_showLegend),
+                    onLocateMe: _locateMe,
+                    onResetView: () => _resetMapView(data),
+                  ),
+                ),
+
+              // ── 4. Bottom route info bar ─────────────────────────────────────
+              if (_currentRoute != null)
+                Positioned(
+                  bottom: 16,
+                  left: isDesktop && _activePanel != null ? 416 : 12,
+                  right: isDesktop ? null : 12,
+                  width: isDesktop ? 380 : null,
+                  child: RouteInfoBar(
+                    distanceMeters: _currentRoute!.distance,
+                    walkingTime: walkingTimeLabel(_currentRoute!.distance),
+                    startLabel: startLoc?.label,
+                    endLabel: endLoc?.label,
+                    onEdit: () => setState(() => _activePanel = 'route'),
+                    onClear: _clearRoute,
+                  ),
+                ),
+
+              // ── 5. Legend overlay (bottom-right) ────────────────────────────
+              if (_showLegend)
+                Positioned(
+                  bottom: _currentRoute != null ? 150 : 20,
+                  right: 14,
+                  child: const LegendOverlay(),
+                ),
+
+              // ── 6. Left sidebar drawer ──────────────────────────────────────
+              Positioned.fill(
+                child: LeftSidebar(
+                  isOpen: _isLeftOpen,
+                  activePanel: _activePanel,
+                  onClose: () => setState(() => _isLeftOpen = false),
+                  onSelect: (panel) {
+                    if (panel == 'legend') {
+                      setState(() {
+                        _showLegend = !_showLegend;
+                        _isLeftOpen = false;
+                      });
+                      return;
+                    }
+                    setState(() {
+                      _activePanel = panel;
+                      _isLeftOpen = false;
+                    });
+                  },
+                ),
+              ),
+
+              // ── 7. Search box (topmost, responsive width) ───────────────────
+              Positioned(
+                top: 14,
+                left: 14,
+                width: isDesktop
+                    ? 372
+                    : (constraints.maxWidth -
+                        (_activePanel == null ? 68.0 : 28.0)),
+                child: NavigatorSearchBox(
+                  controller: _searchController,
+                  isLeftOpen: _isLeftOpen,
+                  onToggleSidebar: () =>
+                      setState(() => _isLeftOpen = !_isLeftOpen),
+                  onSearchChange: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                      if (_activePanel != 'spaces') {
+                        _activePanel = 'spaces';
+                      }
+                    });
+                  },
+                  onFocus: () {
+                    if (_activePanel == null) {
+                      setState(() => _activePanel = 'spaces');
+                    }
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
-    _updateConnectivity(await connectivity.checkConnectivity());
   }
 
-  void _updateConnectivity(List<ConnectivityResult> results) {
-    if (!mounted) {
+  // ─── Panel title ──────────────────────────────────────────────────────────
+  String _panelTitle(ExhibitionMapData data) {
+    switch (_activePanel) {
+      case 'route':
+        return 'Route Finder';
+      case 'spaces':
+        return 'Exhibition Grounds & Exhibitors';
+      case 'help':
+        return 'Navigator Guide';
+      case 'details':
+        return _selectedFeatureInfo?.label ?? 'Feature Details';
+      default:
+        return '';
+    }
+  }
+
+  // ─── Panel content ────────────────────────────────────────────────────────
+  Widget _buildPanelContent(
+    ExhibitionMapData data,
+    List<_CategoryItem> categories,
+    List<RoutingLocation> filteredLocations,
+  ) {
+    switch (_activePanel) {
+      case 'spaces':
+        return SpacesPanel(
+          locations: data.locations,
+          categories: categories,
+          filteredLocations: filteredLocations,
+          categoryFilter: _categoryFilter,
+          onCategoryChanged: (cat) =>
+              setState(() => _categoryFilter = cat),
+          onSelectLocation: (loc) => _selectLocation(loc, data),
+          onSetTarget: (loc) {
+            setState(() {
+              _endLocationId = loc.id;
+              _activePanel = 'route';
+            });
+          },
+        );
+
+      case 'route':
+        return RouteInputPanel(
+          locations: data.locations,
+          startId: _startLocationId,
+          endId: _endLocationId,
+          notice: _routeNotice,
+          onStartChanged: (id) => setState(() {
+            _startLocationId = id;
+            _currentRoute = null;
+          }),
+          onEndChanged: (id) => setState(() {
+            _endLocationId = id;
+            _currentRoute = null;
+          }),
+          onFindRoute: () => _calculateRoute(data),
+          onClearRoute: _clearRoute,
+        );
+
+      case 'details':
+        final info = _selectedFeatureInfo;
+        if (info == null) return const SizedBox();
+        return FeatureDetailsPanel(
+          info: info,
+          onSetDestination: () {
+            if (info.location != null) {
+              setState(() {
+                _endLocationId = info.location!.id;
+                _activePanel = 'route';
+              });
+            }
+          },
+          onSetStart: () {
+            if (info.location != null) {
+              setState(() {
+                _startLocationId = info.location!.id;
+                _activePanel = 'route';
+              });
+            }
+          },
+        );
+
+      case 'help':
+        return const HelpPanel();
+
+      default:
+        return const SizedBox();
+    }
+  }
+
+  // ─── Canvas tap handler ───────────────────────────────────────────────────
+  void _onCanvasTap(MapFeature area, ExhibitionMapData data) {
+    final loc = area.featureId != null
+        ? _findLocation(data.locations, area.featureId!)
+        : null;
+
+    setState(() {
+      _selectedAreaForCanvas = area;
+      _selectedFeatureInfo = SelectedFeatureInfo(
+        id: area.featureId ?? area.key,
+        label: area.title,
+        layerName: area.layer.label,
+        companyName: area.rawProperties['company_name'] as String?,
+        properties: area.rawProperties,
+        location: loc,
+      );
+      _activePanel = 'details';
+    });
+  }
+
+  // ─── Select a location from the spaces list ───────────────────────────────
+  void _selectLocation(RoutingLocation loc, ExhibitionMapData data) {
+    // Find the corresponding canvas feature for highlighting
+    final mapFeature = data.buildings
+        .where((b) => b.featureId == loc.id)
+        .firstOrNull;
+    if (mapFeature != null) {
+      setState(() => _selectedAreaForCanvas = mapFeature);
+    }
+
+    // Focus the map on the location
+    _focusLocation(loc, data);
+
+    setState(() {
+      _selectedFeatureInfo = SelectedFeatureInfo(
+        id: loc.id,
+        label: loc.label,
+        layerName: loc.layerName,
+        companyName: loc.companyName,
+        properties: loc.properties,
+        location: loc,
+      );
+      _activePanel = 'details';
+    });
+  }
+
+  // ─── Focus map on a location ──────────────────────────────────────────────
+  void _focusLocation(RoutingLocation loc, ExhibitionMapData data) {
+    final renderBox =
+        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+
+    final size = renderBox.size;
+    final projection = data.projectionFor(size);
+    final point = projection.project(loc.position);
+
+    final currentScale = _transformController.value.getMaxScaleOnAxis();
+    final targetScale =
+        (math.max(currentScale, 2.5)).clamp(minMapScale, maxMapScale);
+
+    final target = Matrix4.identity()
+      ..translate(
+        size.width / 2 - point.dx * targetScale,
+        size.height / 2 - point.dy * targetScale,
+      )
+      ..scale(targetScale);
+
+    _mapAnimationController.stop();
+    _mapAnimation = Matrix4Tween(
+      begin: _transformController.value.clone(),
+      end: target,
+    ).animate(
+      CurvedAnimation(
+        parent: _mapAnimationController,
+        curve: Curves.easeInOutCubic,
+      ),
+    );
+    _mapAnimationController.forward(from: 0);
+  }
+
+  // ─── Reset map to show all features ──────────────────────────────────────
+  void _resetMapView(ExhibitionMapData data) {
+    setState(() {
+      _selectedAreaForCanvas = null;
+    });
+
+    final renderBox =
+        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+
+    final size = renderBox.size;
+    final projection = data.projectionFor(size);
+
+    // Fit all building features in view
+    final allPoints = data.buildings
+        .expand((b) => b.allPoints)
+        .toList();
+
+    if (allPoints.isEmpty) {
+      _transformController.value = Matrix4.identity();
       return;
     }
-    final isOffline =
-        results.isEmpty || results.contains(ConnectivityResult.none);
-    final reconnected = _isOffline && !isOffline;
-    _connectionBannerTimer?.cancel();
+
+    final projected =
+        allPoints.map((p) => projection.project(p)).toList();
+    final left =
+        projected.map((o) => o.dx).reduce(math.min);
+    final right =
+        projected.map((o) => o.dx).reduce(math.max);
+    final top = projected.map((o) => o.dy).reduce(math.min);
+    final bottom =
+        projected.map((o) => o.dy).reduce(math.max);
+
+    const padding = 40.0;
+    final routeW = math.max(1.0, right - left);
+    final routeH = math.max(1.0, bottom - top);
+    final scale = math
+        .min(
+          (size.width - padding * 2) / routeW,
+          (size.height - padding * 2) / routeH,
+        )
+        .clamp(minMapScale, maxMapScale);
+
+    final cx = (left + right) / 2;
+    final cy = (top + bottom) / 2;
+    final target = Matrix4.identity()
+      ..translate(size.width / 2 - cx * scale, size.height / 2 - cy * scale)
+      ..scale(scale);
+
+    _mapAnimationController.stop();
+    _mapAnimation = Matrix4Tween(
+      begin: _transformController.value.clone(),
+      end: target,
+    ).animate(
+      CurvedAnimation(
+        parent: _mapAnimationController,
+        curve: Curves.easeInOutCubic,
+      ),
+    );
+    _mapAnimationController.forward(from: 0);
+  }
+
+  // ─── Route calculation ────────────────────────────────────────────────────
+  void _calculateRoute(ExhibitionMapData data) {
+    setState(() => _routeNotice = null);
+
+    if (_startLocationId.isEmpty || _endLocationId.isEmpty) {
+      setState(() => _routeNotice =
+          'Please select both start and destination points.');
+      return;
+    }
+    if (_startLocationId == _endLocationId) {
+      setState(
+        () => _routeNotice = 'Start and destination points must be different.',
+      );
+      return;
+    }
+
+    final start = _findLocation(data.locations, _startLocationId);
+    final end = _findLocation(data.locations, _endLocationId);
+    if (start == null || end == null) {
+      setState(() => _routeNotice = 'Location not found.');
+      return;
+    }
+
+    final result = shortestPath(start.nodeId, end.nodeId, data.edges);
+    if (result == null) {
+      setState(
+        () => _routeNotice = 'No path was found between these locations.',
+      );
+      return;
+    }
+
     setState(() {
-      _isOffline = isOffline;
-      _showConnectionBanner = true;
-      if (reconnected) {
-        _mapFuture = ExhibitionMapData.load();
-        _tileRefreshGeneration++;
+      _currentRoute = result;
+      _mapRotation = 0;
+      _activePanel = null;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(_currentRoute, result)) {
+        _fitRouteToScreen(data, result);
       }
     });
-    _connectionBannerTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) {
-        setState(() => _showConnectionBanner = false);
-      }
+  }
+
+  void _clearRoute() {
+    setState(() {
+      _startLocationId = '';
+      _endLocationId = '';
+      _currentRoute = null;
+      _routeNotice = null;
     });
+  }
+
+  // ─── Fit route to screen ──────────────────────────────────────────────────
+  void _fitRouteToScreen(ExhibitionMapData data, RouteResult route) {
+    final renderBox =
+        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+
+    final size = renderBox.size;
+    final projection = data.projectionFor(size);
+    final nodeById = {for (final node in data.nodes) node.id: node};
+    final points = route.nodeIds
+        .map((id) => nodeById[id])
+        .whereType<RoutingNode>()
+        .map(
+          (node) => projection.project(GeoPoint(node.longitude, node.latitude)),
+        )
+        .toList();
+    if (points.isEmpty) return;
+
+    final left = points.map((p) => p.dx).reduce(math.min);
+    final right = points.map((p) => p.dx).reduce(math.max);
+    final top = points.map((p) => p.dy).reduce(math.min);
+    final bottom = points.map((p) => p.dy).reduce(math.max);
+    const padding = 72.0;
+    final routeWidth = math.max(1.0, right - left);
+    final routeHeight = math.max(1.0, bottom - top);
+    final scale = math
+        .min(
+          (size.width - padding * 2) / routeWidth,
+          (size.height - padding * 2) / routeHeight,
+        )
+        .clamp(minMapScale, maxMapScale);
+    final routeCenter = Offset((left + right) / 2, (top + bottom) / 2);
+    final target = Matrix4.identity()
+      ..translate(
+        size.width / 2 - routeCenter.dx * scale,
+        size.height / 2 - routeCenter.dy * scale,
+      )
+      ..scale(scale);
+
+    _mapAnimationController.stop();
+    _mapAnimation = Matrix4Tween(
+      begin: _transformController.value.clone(),
+      end: target,
+    ).animate(
+      CurvedAnimation(
+        parent: _mapAnimationController,
+        curve: Curves.easeInOutCubic,
+      ),
+    );
+    _mapAnimationController.forward(from: 0);
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+  RoutingLocation? _findLocation(List<RoutingLocation> locations, String id) {
+    if (id.isEmpty) return null;
+    for (final l in locations) {
+      if (l.id == id) return l;
+    }
+    return null;
   }
 
   void _zoom(double factor) {
     final current = _transformController.value;
     final currentScale = current.getMaxScaleOnAxis();
     final nextScale = (currentScale * factor).clamp(minMapScale, maxMapScale);
-    if (currentScale == nextScale) {
-      return;
-    }
-
+    if (currentScale == nextScale) return;
     final adjustedFactor = nextScale / currentScale;
-    _transformController.value = current.scaled(adjustedFactor, adjustedFactor);
+    _transformController.value =
+        current.scaled(adjustedFactor, adjustedFactor);
   }
 
   Future<void> _locateMe() async {
@@ -620,16 +846,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           );
         },
       );
-
-      if (allowed != true || !mounted) {
-        return;
-      }
+      if (allowed != true || !mounted) return;
       setState(() => _locationAllowed = true);
     }
-
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Location access enabled.')));
@@ -658,135 +878,38 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           );
         },
       );
-
-      if (allowed != true || !mounted) {
-        return;
-      }
+      if (allowed != true || !mounted) return;
       _locationAllowed = true;
     }
-
     setState(() {
       _selectedService = service;
-      _selectedArea = service.area;
       _selectedNavIndex = 0;
     });
-    _searchFocusNode.unfocus();
   }
 
-  void _clearRoute() {
-    setState(() {
-      _startLocationId = '';
-      _endLocationId = '';
-      _currentRoute = null;
-      _routeNotice = null;
-      _routeMinimized = false;
-    });
+  Future<void> _monitorConnectivity() async {
+    final connectivity = Connectivity();
+    _connectivitySubscription =
+        connectivity.onConnectivityChanged.listen(_updateConnectivity);
+    _updateConnectivity(await connectivity.checkConnectivity());
   }
 
-  void _swapLocations() {
+  void _updateConnectivity(List<ConnectivityResult> results) {
+    if (!mounted) return;
+    final isOffline =
+        results.isEmpty || results.contains(ConnectivityResult.none);
+    final reconnected = _isOffline && !isOffline;
+    _connectionBannerTimer?.cancel();
     setState(() {
-      final temp = _startLocationId;
-      _startLocationId = _endLocationId;
-      _endLocationId = temp;
-      if (_currentRoute != null) {
-        _currentRoute = null;
-        _routeMinimized = false;
+      _isOffline = isOffline;
+      _showConnectionBanner = true;
+      if (reconnected) {
+        _mapFuture = ExhibitionMapData.load();
+        _tileRefreshGeneration++;
       }
     });
-  }
-
-  void _fitRouteToScreen(ExhibitionMapData data, RouteResult route) {
-    final renderBox =
-        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.hasSize) {
-      return;
-    }
-
-    final size = renderBox.size;
-    final projection = data.projectionFor(size);
-    final nodeById = {for (final node in data.nodes) node.id: node};
-    final points = route.nodeIds
-        .map((nodeId) => nodeById[nodeId])
-        .whereType<RoutingNode>()
-        .map(
-          (node) => projection.project(GeoPoint(node.longitude, node.latitude)),
-        )
-        .toList();
-    if (points.isEmpty) {
-      return;
-    }
-
-    final left = points.map((point) => point.dx).reduce(math.min);
-    final right = points.map((point) => point.dx).reduce(math.max);
-    final top = points.map((point) => point.dy).reduce(math.min);
-    final bottom = points.map((point) => point.dy).reduce(math.max);
-    const padding = 72.0;
-    final routeWidth = math.max(1.0, right - left);
-    final routeHeight = math.max(1.0, bottom - top);
-    final scale = math
-        .min(
-          (size.width - padding * 2) / routeWidth,
-          (size.height - padding * 2) / routeHeight,
-        )
-        .clamp(minMapScale, maxMapScale);
-    final routeCenter = Offset((left + right) / 2, (top + bottom) / 2);
-    final target = Matrix4.identity()
-      ..translate(
-        size.width / 2 - routeCenter.dx * scale,
-        size.height / 2 - routeCenter.dy * scale,
-      )
-      ..scale(scale);
-
-    _mapAnimationController.stop();
-    _mapAnimation =
-        Matrix4Tween(
-          begin: _transformController.value.clone(),
-          end: target,
-        ).animate(
-          CurvedAnimation(
-            parent: _mapAnimationController,
-            curve: Curves.easeInOutCubic,
-          ),
-        );
-    _mapAnimationController.forward(from: 0);
-  }
-
-  void _calculateRoute(ExhibitionMapData data) {
-    setState(() => _routeNotice = null);
-    if (_startLocationId.isEmpty || _endLocationId.isEmpty) {
-      setState(
-        () => _routeNotice = 'Please select both start and end locations.',
-      );
-      return;
-    }
-    if (_startLocationId == _endLocationId) {
-      setState(
-        () => _routeNotice = 'Start and end locations must be different.',
-      );
-      return;
-    }
-
-    final start = data.locations.firstWhere(
-      (loc) => loc.id == _startLocationId,
-    );
-    final end = data.locations.firstWhere((loc) => loc.id == _endLocationId);
-    final result = shortestPath(start.nodeId, end.nodeId, data.edges);
-    if (result == null) {
-      setState(
-        () => _routeNotice = 'No path was found between these locations.',
-      );
-      return;
-    }
-
-    setState(() {
-      _currentRoute = result;
-      _routeMinimized = true;
-      _mapRotation = 0;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && identical(_currentRoute, result)) {
-        _fitRouteToScreen(data, result);
-      }
+    _connectionBannerTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _showConnectionBanner = false);
     });
   }
 }

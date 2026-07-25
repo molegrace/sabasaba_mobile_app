@@ -15,6 +15,14 @@ part 'features/map/presentation/widgets/map_tile_layer.dart';
 part 'features/map/presentation/widgets/route_panel.dart';
 part 'features/map/presentation/widgets/search_panel.dart';
 part 'features/map/presentation/widgets/area_modal.dart';
+part 'features/map/presentation/widgets/left_sidebar.dart';
+part 'features/map/presentation/widgets/navigator_main_panel.dart';
+part 'features/map/presentation/widgets/spaces_panel.dart';
+part 'features/map/presentation/widgets/feature_details_panel.dart';
+part 'features/map/presentation/widgets/help_panel.dart';
+part 'features/map/presentation/widgets/legend_overlay.dart';
+part 'features/map/presentation/widgets/info_bar.dart';
+part 'features/map/presentation/widgets/right_toolbar.dart';
 part 'features/services/presentation/services_tab.dart';
 part 'features/info/presentation/info_tab.dart';
 part 'features/exhibitor/presentation/exhibitor_tab.dart';
@@ -43,7 +51,7 @@ class SabaSabaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xff0f8b6f);
+    const seed = Color(0xff0284c7);
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -53,6 +61,7 @@ class SabaSabaApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(
           seedColor: seed,
           brightness: Brightness.light,
+          primary: const Color(0xff0284c7),
         ),
         scaffoldBackgroundColor: const Color(0xfff3f6f1),
         textTheme: const TextTheme(

@@ -4,22 +4,28 @@ class MapFeature {
   MapFeature({
     required this.layer,
     required this.index,
+    required this.featureId,
     required this.id,
     required this.code,
     required this.polygons,
     required this.lines,
     required this.points,
+    required this.rawProperties,
   });
 
   final Layer layer;
   final int index;
+  /// The database UUID of this feature (top-level `id` from the features table).
+  final String? featureId;
   final Object? id;
   final String? code;
   final List<List<GeoPoint>> polygons;
   final List<List<GeoPoint>> lines;
   final List<GeoPoint> points;
+  /// Full raw properties map from Supabase for use in the detail panel.
+  final Map<String, dynamic> rawProperties;
 
-  String get key => '${layer.name}-$index-${id ?? code ?? 'feature'}';
+  String get key => '${layer.name}-$index-${featureId ?? id ?? code ?? 'feature'}';
 
   String get shortCode {
     final raw = (code?.isNotEmpty ?? false) ? code! : '${id ?? index + 1}';
@@ -88,6 +94,7 @@ class MapFeature {
     Layer layer,
     int index,
   ) {
+    final featureId = feature['id'] as String?; // database UUID
     final properties = feature['properties'] as Map<String, dynamic>? ?? {};
     final geometry = feature['geometry'] as Map<String, dynamic>;
     final type = geometry['type'] as String;
@@ -120,11 +127,13 @@ class MapFeature {
     return MapFeature(
       layer: layer,
       index: index,
+      featureId: featureId,
       id: properties['id'],
       code: nameVal?.toString(),
       polygons: polygons,
       lines: lines,
       points: points,
+      rawProperties: properties,
     );
   }
 

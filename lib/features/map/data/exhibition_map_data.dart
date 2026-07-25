@@ -30,6 +30,71 @@ class Exhibition {
   }
 }
 
+/// Internal helper for layer metadata.
+class _LayerMeta {
+  final String id;
+  final String editorKey;
+  final String name;
+  final String? color;
+  final String? fill;
+
+  const _LayerMeta({
+    required this.id,
+    required this.editorKey,
+    required this.name,
+    this.color,
+    this.fill,
+  });
+}
+
+/// Internal helper for a raw navigable feature from Supabase.
+class _RawFeature {
+  final String id; // database UUID
+  final String layerId;
+  final Map<String, dynamic> geometry;
+  final Map<String, dynamic> properties;
+
+  const _RawFeature({
+    required this.id,
+    required this.layerId,
+    required this.geometry,
+    required this.properties,
+  });
+
+  factory _RawFeature.fromJson(Map<String, dynamic> json) {
+    return _RawFeature(
+      id: json['id'] as String,
+      layerId: json['layer_id'] as String? ?? '',
+      geometry: json['geometry'] as Map<String, dynamic>? ?? {},
+      properties: json['properties'] as Map<String, dynamic>? ?? {},
+    );
+  }
+
+  /// Compute centroid of the feature's geometry.
+  GeoPoint? get center {
+    final coords = geometry['coordinates'];
+    if (coords == null) return null;
+    final positions = _collectGeoPoints(coords);
+    if (positions.isEmpty) return null;
+    final totalLng = positions.fold(0.0, (sum, p) => sum + p.lng);
+    final totalLat = positions.fold(0.0, (sum, p) => sum + p.lat);
+    return GeoPoint(totalLng / positions.length, totalLat / positions.length);
+  }
+
+  static List<GeoPoint> _collectGeoPoints(dynamic value) {
+    if (value is! List) return [];
+    if (value.length >= 2 && value[0] is num && value[1] is num) {
+      return [
+        GeoPoint(
+          (value[0] as num).toDouble(),
+          (value[1] as num).toDouble(),
+        ),
+      ];
+    }
+    return [for (final v in value) ..._collectGeoPoints(v)];
+  }
+}
+
 class ExhibitionMapData {
   static const _supabaseUrl = 'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1';
   static const _supabaseKey = 'sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV';
@@ -59,14 +124,15 @@ class ExhibitionMapData {
   final List<RoutingNode> nodes;
   final List<RoutingEdge> edges;
   final List<RoutingLocation> locations;
+
   /// Metadata about the active exhibition.
   final Exhibition? exhibition;
 
   // ---------------------------------------------------------------------------
-  // Load from Supabase — single source of truth, no API fallback
+  // Load from Supabase — single source of truth
   // ---------------------------------------------------------------------------
   static Future<ExhibitionMapData> load() async {
-    // 1. Find the latest ongoing or closed exhibition (not archived / draft)
+    // 1. Find the latest ongoing or closed exhibition
     final exhibitionResponse = await http
         .get(
           Uri.parse(
@@ -110,11 +176,11 @@ class ExhibitionMapData {
     final mapId = mapList.first['id'] as String;
     print('SabaSaba - Map ID: $mapId');
 
-    // 3. Load all layers for this map
+    // 3. Load all layers for this map (now includes name, color, fill)
     final layersResponse = await http
         .get(
           Uri.parse(
-            '$_supabaseUrl/layers?map_id=eq.$mapId&select=id,editor_key',
+            '$_supabaseUrl/layers?map_id=eq.$mapId&select=id,editor_key,name,color,fill',
           ),
           headers: _headers,
         )
@@ -126,16 +192,33 @@ class ExhibitionMapData {
       'SabaSaba - Layers: ${layerList.map((l) => l['editor_key']).toList()}',
     );
 
-    // Build a map of editor_key → layer id
+    // Build lookup maps
     final layerIdByKey = <String, String>{};
+    final layerMetaById = <String, _LayerMeta>{};
+    final allLayerMeta = <_LayerMeta>[];
+
     for (final item in layerList) {
       final key = item['editor_key'] as String?;
       final id = item['id'] as String?;
-      if (key != null && id != null) layerIdByKey[key] = id;
+      final name = item['name'] as String? ?? key ?? 'Unknown';
+      final color = item['color'] as String?;
+      final fill = item['fill'] as String?;
+      if (key != null && id != null) {
+        layerIdByKey[key] = id;
+        final meta = _LayerMeta(
+          id: id,
+          editorKey: key,
+          name: name,
+          color: color,
+          fill: fill,
+        );
+        layerMetaById[id] = meta;
+        allLayerMeta.add(meta);
+      }
     }
 
-    // 4. Fetch all feature sets — typed futures kept separate to preserve types
-    final buildingLayerKeys = ['booths', 'spaces', 'buildings'];
+    // 4. Fetch canvas feature sets
+    const buildingLayerKeys = ['booths', 'spaces', 'buildings'];
     final buildingLayerIds = buildingLayerKeys
         .map((k) => layerIdByKey[k])
         .whereType<String>()
@@ -145,25 +228,39 @@ class ExhibitionMapData {
     final treeLayerId = layerIdByKey['trees'];
     final boundaryLayerId = layerIdByKey['boundary'];
 
-    // Fetch features in parallel, keeping each future typed correctly
+    // 5. Determine navigable layer IDs (all except roads/trees/boundary)
+    const skipKeys = {'roads', 'boundary', 'trees'};
+    final navigableLayerIds = allLayerMeta
+        .where((l) => !skipKeys.contains(l.editorKey))
+        .map((l) => l.id)
+        .toList();
+
+    // 6. Fetch all data in parallel
     final buildingsFuture = _fetchFeatures(buildingLayerIds, Layer.building);
     final roadsFuture = _fetchFeaturesForLayer(roadLayerId, Layer.road);
     final treesFuture = _fetchFeaturesForLayer(treeLayerId, Layer.tree);
     final boundariesFuture = _fetchFeaturesForLayer(boundaryLayerId, Layer.boundary);
     final nodesFuture = _fetchNodes(mapId);
     final edgesFuture = _fetchEdges(mapId);
+    // Fetch all navigable features in a single request
+    final navigableFeaturesFuture = navigableLayerIds.isNotEmpty
+        ? _fetchNavigableFeatures(navigableLayerIds)
+        : Future.value(<_RawFeature>[]);
 
-    // Await all in parallel
     final buildings = await buildingsFuture;
     final roads = await roadsFuture;
     final trees = await treesFuture;
     final boundaries = await boundariesFuture;
     final nodes = await nodesFuture;
     final edges = await edgesFuture;
+    final navigableFeatures = await navigableFeaturesFuture;
 
-    print('SabaSaba - buildings: ${buildings.length}, roads: ${roads.length}, '
-        'trees: ${trees.length}, boundaries: ${boundaries.length}');
+    print(
+      'SabaSaba - buildings: ${buildings.length}, roads: ${roads.length}, '
+      'trees: ${trees.length}, boundaries: ${boundaries.length}',
+    );
     print('SabaSaba - nodes: ${nodes.length}, edges: ${edges.length}');
+    print('SabaSaba - navigable features: ${navigableFeatures.length}');
 
     final allPoints = [
       for (final f in [...buildings, ...roads, ...trees, ...boundaries])
@@ -173,19 +270,45 @@ class ExhibitionMapData {
       throw const FormatException('Map returned no renderable geometry.');
     }
 
-    // 5. Build routing locations from building centroids
+    // 7. Build routing locations from ALL navigable layer features
+    // Matches the web navigator's location-building logic.
     final locations = <RoutingLocation>[];
     if (nodes.isNotEmpty) {
-      for (final building in buildings) {
-        final position = building.center;
+      for (var i = 0; i < navigableFeatures.length; i++) {
+        final rawFeature = navigableFeatures[i];
+        final position = rawFeature.center;
+        if (position == null) continue;
+
         final node = nearestNode(position, nodes);
+        final layerMeta = layerMetaById[rawFeature.layerId];
+        final layerName = layerMeta?.name ?? '';
+        final props = rawFeature.properties;
+        final companyName = props['company_name'] as String?;
+
+        // Build label matching web's featureLabel function
+        final baseValue = props['name'] ??
+            props['booth_code'] ??
+            props['number'] ??
+            props['1'] ??
+            props['id'];
+        final labelText =
+            baseValue != null ? baseValue.toString() : '$layerName ${i + 1}';
+        final label =
+            companyName != null ? '$labelText ($companyName)' : labelText;
+        final description = companyName != null
+            ? 'Exhibitor: $companyName • $layerName'
+            : layerName;
+
         locations.add(
           RoutingLocation(
-            id: building.key,
-            label: building.title,
-            description: 'Area',
+            id: rawFeature.id,
+            label: label,
+            description: description,
             position: position,
             nodeId: node.id,
+            layerName: layerName,
+            companyName: companyName,
+            properties: props,
           ),
         );
       }
@@ -216,8 +339,11 @@ class ExhibitionMapData {
   ) async {
     final result = <MapFeature>[];
     for (final layerId in layerIds) {
-      final fetched = await _fetchFeaturesForLayer(layerId, layer,
-          indexOffset: result.length);
+      final fetched = await _fetchFeaturesForLayer(
+        layerId,
+        layer,
+        indexOffset: result.length,
+      );
       result.addAll(fetched);
     }
     return result;
@@ -249,6 +375,29 @@ class ExhibitionMapData {
           indexOffset + i,
         ),
     ];
+  }
+
+  /// Fetches raw features from multiple navigable layer IDs in one request.
+  static Future<List<_RawFeature>> _fetchNavigableFeatures(
+    List<String> layerIds,
+  ) async {
+    if (layerIds.isEmpty) return [];
+    final idsStr = layerIds.join(',');
+    final response = await http
+        .get(
+          Uri.parse(
+            '$_supabaseUrl/features'
+            '?layer_id=in.($idsStr)'
+            '&select=id,layer_id,geometry,properties',
+          ),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 15));
+    _assertOk(response, 'navigable_features');
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list
+        .map((item) => _RawFeature.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   static Future<List<RoutingNode>> _fetchNodes(String mapId) async {
@@ -295,15 +444,13 @@ class ExhibitionMapData {
   }
 
   // ---------------------------------------------------------------------------
-  // Map query helpers (used by the map screen)
+  // Map query helpers
   // ---------------------------------------------------------------------------
 
   List<MapFeature> searchBuildings(String query) {
     final normalized = query.trim().toLowerCase();
     if (normalized.isEmpty) return buildings;
-    return buildings
-        .where((f) => f.searchText.contains(normalized))
-        .toList();
+    return buildings.where((f) => f.searchText.contains(normalized)).toList();
   }
 
   MapFeature? hitTest(Offset scenePoint, Size size) {
