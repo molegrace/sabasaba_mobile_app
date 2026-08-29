@@ -788,7 +788,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
     final currentScale = _transformController.value.getMaxScaleOnAxis();
     final targetScale =
-        (math.max(currentScale, 2.5)).clamp(minMapScale, maxMapScale);
+        (math.max(currentScale, 4.5)).clamp(minMapScale, maxMapScale);
+
 
     final target = Matrix4.identity()
       ..translate(
