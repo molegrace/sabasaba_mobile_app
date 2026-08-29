@@ -87,7 +87,9 @@ class MapCanvas extends StatelessWidget {
                         data: data,
                         tileStyle: tileStyle,
                         refreshGeneration: tileRefreshGeneration,
+                        controller: controller,
                       ),
+
                       CustomPaint(
                         painter: ExhibitionMapPainter(
                           data: data,

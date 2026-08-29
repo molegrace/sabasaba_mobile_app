@@ -5,11 +5,13 @@ class MapTileLayer extends StatelessWidget {
     required this.data,
     required this.tileStyle,
     required this.refreshGeneration,
+    required this.controller,
   });
 
   final ExhibitionMapData data;
   final MapTileStyle tileStyle;
   final int refreshGeneration;
+  final TransformationController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -18,24 +20,32 @@ class MapTileLayer extends StatelessWidget {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         final projection = data.projectionFor(size);
         final visibleBounds = projection.visibleBounds;
-        final zoom = tileStyle.zoom;
+
+        final currentScale = math.max(0.01, controller.value.getMaxScaleOnAxis());
+        final baseZoom = tileStyle.zoom;
+        final zoomOffset = (math.log(currentScale) / math.ln2).round();
+        final zoom = (baseZoom + zoomOffset).clamp(1, 19);
+
         final maxTile = (1 << zoom) - 1;
+
         final minX = _clampTile(
-          _lngToTileX(visibleBounds.minLng, zoom) - 1,
+          _lngToTileX(visibleBounds.minLng, zoom) - 6,
           maxTile,
         );
         final maxX = _clampTile(
-          _lngToTileX(visibleBounds.maxLng, zoom) + 1,
+          _lngToTileX(visibleBounds.maxLng, zoom) + 6,
           maxTile,
         );
         final minY = _clampTile(
-          _latToTileY(visibleBounds.maxLat, zoom) - 1,
+          _latToTileY(visibleBounds.maxLat, zoom) - 6,
           maxTile,
         );
         final maxY = _clampTile(
-          _latToTileY(visibleBounds.minLat, zoom) + 1,
+          _latToTileY(visibleBounds.minLat, zoom) + 6,
           maxTile,
         );
+
+
 
         return ColoredBox(
           color: tileStyle.fallbackColor,
