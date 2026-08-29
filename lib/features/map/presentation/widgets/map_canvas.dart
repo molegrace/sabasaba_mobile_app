@@ -311,10 +311,29 @@ class ExhibitionMapPainter extends CustomPainter {
         final routePaint = Paint()
           ..color = const Color(0xff0284c7) // sky-600 - matches web
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.8
+          ..strokeWidth = 1.8 / currentScale
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+
+        _drawDashedPolyline(canvas, routePoints, routePaint);
+
+        // Paint start as an emerald dot (fixed size when zooming)
+        final startOffset = projection.project(startPoint!);
+        canvas.drawCircle(startOffset, 5 / currentScale, Paint()..color = Colors.white);
+        canvas.drawCircle(
+          startOffset,
+          4 / currentScale,
+          Paint()..color = const Color(0xff10b981), // emerald-500
+        );
+
+        // Paint the destination as a rose location pin
+        final endOffset = projection.project(endPoint!);
+        final destinationPainter = TextPainter(
+          text: TextSpan(
+            text: String.fromCharCode(Icons.location_pin.codePoint),
             style: TextStyle(
               color: const Color(0xfff43f5e), // rose-500 - matches web
-              fontSize: 16,
+              fontSize: 16 / currentScale,
               fontFamily: Icons.location_pin.fontFamily,
               package: Icons.location_pin.fontPackage,
             ),
@@ -356,11 +375,11 @@ class ExhibitionMapPainter extends CustomPainter {
           Paint()
             ..color = const Color(0x990284c7)
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 1,
+            ..strokeWidth = 1 / currentScale,
         );
       }
-        canvas.drawCircle(center, 9, Paint()..color = Colors.white);
-      canvas.drawCircle(center, 6, Paint()..color = const Color(0xff0284c7));
+      canvas.drawCircle(center, 9 / currentScale, Paint()..color = Colors.white);
+      canvas.drawCircle(center, 6 / currentScale, Paint()..color = const Color(0xff0284c7));
     }
   }
 
