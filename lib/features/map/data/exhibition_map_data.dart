@@ -109,8 +109,9 @@ class _RawFeature {
 class ExhibitionMapData {
   static const navigatorApiUrl = String.fromEnvironment(
     'SABASABA_MAP_API_URL',
-    defaultValue: 'https://77.alphabeti.co.tz/api/map',
+    defaultValue: 'https://sabasaba.alphabeti.co.tz/api/map',
   );
+
   static const _supabaseUrl = 'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1';
   static const _supabaseKey = 'sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV';
   static const _headers = {
@@ -320,7 +321,10 @@ class ExhibitionMapData {
       final rawCompany = props['company_name'] ??
           props['companyName'] ??
           props['company'] ??
-          props['exhibitor'];
+          props['exhibitor'] ??
+          props['exhibitor_name'] ??
+          props['exhibitorName'];
+
       final companyName =
           rawCompany != null && rawCompany.toString().trim().isNotEmpty
               ? rawCompany.toString().trim()
@@ -794,7 +798,8 @@ class ExhibitionMapData {
           Uri.parse(
             '$_supabaseUrl/features'
             '?layer_id=in.($idsStr)'
-            '&select=id,layer_id,label,code,status,public_id,geometry_type,geometry,sort_order',
+            '&select=id,layer_id,label,code,status,public_id,geometry_type,geometry,properties,sort_order',
+
           ),
           headers: _headers,
         )
