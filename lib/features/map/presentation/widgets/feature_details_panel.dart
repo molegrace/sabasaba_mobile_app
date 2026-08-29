@@ -19,10 +19,8 @@ class SelectedFeatureInfo {
   });
 }
 
-/// Feature details panel — matches the web navigator's "details" panel.
-/// Shows layer badge, feature ID, exhibitor card, properties table,
-/// and Set Destination / Set Starting Point buttons.
-class FeatureDetailsPanel extends StatelessWidget {
+/// Feature details panel — exact structural & visual parity with Next.js Navigator.
+class FeatureDetailsPanel extends StatefulWidget {
   const FeatureDetailsPanel({
     super.key,
     required this.info,
@@ -43,90 +41,594 @@ class FeatureDetailsPanel extends StatelessWidget {
   final VoidCallback onShare;
 
   @override
+  State<FeatureDetailsPanel> createState() => _FeatureDetailsPanelState();
+}
+
+class _FeatureDetailsPanelState extends State<FeatureDetailsPanel> {
+  String _activeTab = 'overview'; // 'overview' | 'offerings' | 'team' | 'about'
+  Offering? _selectedOfferingModal;
+
+  @override
   Widget build(BuildContext context) {
+    final info = widget.info;
     final props = info.properties;
     final loc = info.location;
-    final hasLocation = loc != null;
 
+    final companyName = loc?.companyName ?? props['company_name']?.toString() ?? info.companyName;
     final logoUrl = loc?.logoUrl ?? props['logo_url']?.toString();
-    final photos = loc?.photos ?? (props['photos'] is List ? props['photos'] as List : null);
-    final team = loc?.team ?? (props['team'] is List ? props['team'] as List : null);
+    final rawPhotos = loc?.photos ?? (props['photos'] is List ? props['photos'] as List : null);
+    final rawTeam = loc?.team ?? (props['team'] is List ? props['team'] as List : null);
     final offerings = loc?.offerings;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
+    final photos = <String>[];
+    if (rawPhotos != null) {
+      for (final p in rawPhotos) {
+        final url = _featureMediaUrl(p);
+        if (url != null) photos.add(url);
+      }
+    }
+
+    final heroImage = photos.isNotEmpty ? photos.first : logoUrl;
+
+    final contactPerson = props['contact_person']?.toString();
+    final email = props['email']?.toString();
+    final phone = props['phone']?.toString();
+    final website = props['website']?.toString();
+    final description = props['description']?.toString() ?? loc?.description;
+
+    final industries = loc?.industries ??
+        (loc?.industry != null
+            ? [loc!.industry!]
+            : (props['industries'] is List
+                ? (props['industries'] as List).map((e) => e.toString()).toList()
+                : (props['industry'] != null ? [props['industry'].toString()] : <String>[])));
+
+    return Stack(
       children: [
-        // Feature header card with logo and bookmark toggle
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── 1. Hero Cover Banner ──────────────────────────────────────────
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: SizedBox(
+                height: 180,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (heroImage != null && heroImage.isNotEmpty)
+                      Image.network(
+                        heroImage,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildDefaultBannerGradient(info.layerName),
+                      )
+                    else
+                      _buildDefaultBannerGradient(info.layerName),
+
+                    // Gradient overlay
+                    Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Color(0x990f172a),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Floating Category Badge
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xcc0f172a),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xff34d399),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              info.layerName.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── 2. Main Title Section ──────────────────────────────────────────
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              companyName ?? info.label,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xff0f172a),
+                                height: 1.2,
+                              ),
+                            ),
+                            if (companyName != null) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                'Feature: ${info.label}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xff64748b),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (logoUrl != null && logoUrl.isNotEmpty) ...[
+                        const SizedBox(width: 12),
+                        Container(
+                          width: 48,
+                          height: 48,
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xffe2e8f0)),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x0a000000),
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              logoUrl,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xffecfdf5),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xffa7f3d0)),
+                        ),
+                        child: Text(
+                          companyName != null ? 'Assigned Exhibitor' : 'Spatial Feature',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xff047857),
+                          ),
+                        ),
+                      ),
+                      if (industries.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '• ${industries.join(", ")}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xff64748b),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // ── 3. Action Circular Buttons Row ─────────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  top: BorderSide(color: Color(0xfff1f5f9)),
+                  bottom: BorderSide(color: Color(0xffe2e8f0)),
+                ),
+              ),
+
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _CircularActionButton(
+                    icon: Icons.turn_right_rounded,
+                    label: 'Directions',
+                    backgroundColor: const Color(0xff0284c7),
+                    iconColor: Colors.white,
+                    onTap: widget.onSetDestination,
+                  ),
+                  _CircularActionButton(
+                    icon: Icons.location_on_rounded,
+                    label: 'Start Point',
+                    backgroundColor: const Color(0xffe0f2fe),
+                    iconColor: const Color(0xff0369a1),
+                    onTap: widget.onSetStart,
+                  ),
+                  _CircularActionButton(
+                    icon: Icons.map_rounded,
+                    label: 'View on map',
+                    backgroundColor: const Color(0xffe0f2fe),
+                    iconColor: const Color(0xff0369a1),
+                    onTap: widget.onViewOnMap,
+                  ),
+                  if (widget.onToggleSave != null)
+                    _CircularActionButton(
+                      icon: widget.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                      label: widget.isSaved ? 'Saved' : 'Save',
+                      backgroundColor: widget.isSaved ? const Color(0xfff59e0b) : const Color(0xffe0f2fe),
+                      iconColor: widget.isSaved ? Colors.white : const Color(0xff0369a1),
+                      onTap: widget.onToggleSave!,
+                    ),
+                  _CircularActionButton(
+                    icon: Icons.share_rounded,
+                    label: 'Share',
+                    backgroundColor: const Color(0xffe0f2fe),
+                    iconColor: const Color(0xff0369a1),
+                    onTap: widget.onShare,
+                  ),
+                ],
+              ),
+            ),
+
+            // ── 4. Navigation Tabs Bar ─────────────────────────────────────────
+            Container(
+              color: Colors.white,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    _TabButton(
+                      label: 'Overview',
+                      active: _activeTab == 'overview',
+                      onTap: () => setState(() => _activeTab = 'overview'),
+                    ),
+                    _TabButton(
+                      label: 'Products & Offers',
+                      count: offerings?.length,
+                      active: _activeTab == 'offerings',
+                      onTap: () => setState(() => _activeTab = 'offerings'),
+                    ),
+                    _TabButton(
+                      label: 'Team',
+                      count: rawTeam?.length,
+                      active: _activeTab == 'team',
+                      onTap: () => setState(() => _activeTab = 'team'),
+                    ),
+                    _TabButton(
+                      label: 'About',
+                      active: _activeTab == 'about',
+                      onTap: () => setState(() => _activeTab = 'about'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── 5. Tab Content Sections ────────────────────────────────────────
+            Container(
+              color: const Color(0xfff8fafc),
+              padding: const EdgeInsets.all(16),
+              child: _buildTabContent(
+                contactPerson: contactPerson,
+                email: email,
+                phone: phone,
+                website: website,
+                description: description,
+                offerings: offerings,
+                rawTeam: rawTeam,
+                props: props,
+              ),
+            ),
+          ],
+        ),
+
+        // Product Details Modal Overlay
+        if (_selectedOfferingModal != null)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black54,
+              padding: const EdgeInsets.all(20),
+              alignment: Alignment.center,
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                elevation: 8,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xffe0f2fe),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              (_selectedOfferingModal!.type ?? 'PRODUCT').toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xff0369a1),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () => setState(() => _selectedOfferingModal = null),
+                            icon: const Icon(Icons.close_rounded, size: 20),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (_selectedOfferingModal!.imageUrl != null &&
+                          _selectedOfferingModal!.imageUrl!.isNotEmpty) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            _selectedOfferingModal!.imageUrl!,
+                            height: 160,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      Text(
+                        _selectedOfferingModal!.title ?? '',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xff0f172a),
+                        ),
+                      ),
+                      if (_selectedOfferingModal!.priceText != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _selectedOfferingModal!.priceText!,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xff059669),
+                          ),
+                        ),
+                      ],
+                      if (_selectedOfferingModal!.description != null &&
+                          _selectedOfferingModal!.description!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _selectedOfferingModal!.description!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xff475569),
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDefaultBannerGradient(String layerName) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xff075985),
+            Color(0xff312e81),
+            Color(0xff0f172a),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.location_on_rounded, size: 40, color: Color(0xff38bdf8)),
+            const SizedBox(height: 6),
+            Text(
+              layerName.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xffbae6fd),
+                letterSpacing: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabContent({
+    required String? contactPerson,
+    required String? email,
+    required String? phone,
+    required String? website,
+    required String? description,
+    required List<Offering>? offerings,
+    required List<dynamic>? rawTeam,
+    required Map<String, dynamic> props,
+  }) {
+    switch (_activeTab) {
+      case 'offerings':
+        return _buildOfferingsTab(offerings);
+      case 'team':
+        return _buildTeamTab(rawTeam);
+      case 'about':
+        return _buildAboutTab(description, props);
+      case 'overview':
+      default:
+        return _buildOverviewTab(
+          contactPerson: contactPerson,
+          email: email,
+          phone: phone,
+          website: website,
+          offerings: offerings,
+        );
+    }
+  }
+
+  // ── Tab 1: Overview ────────────────────────────────────────────────────────
+  Widget _buildOverviewTab({
+    required String? contactPerson,
+    required String? email,
+    required String? phone,
+    required String? website,
+    required List<Offering>? offerings,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Key Information Card
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xffe0f2fe).withOpacity(0.7),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xffbae6fd)),
+            border: Border.all(color: const Color(0xffe2e8f0)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xffbae6fd),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
+              const Text(
+                'KEY INFORMATION',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xff94a3b8),
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (contactPerson != null && contactPerson.isNotEmpty)
+                _InfoRow(
+                  icon: Icons.person_rounded,
+                  iconColor: const Color(0xff0284c7),
+                  child: Text(
+                    contactPerson,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xff334155)),
+                  ),
+                ),
+              if (email != null && email.isNotEmpty)
+                _InfoRow(
+                  icon: Icons.email_rounded,
+                  iconColor: const Color(0xff0284c7),
+                  child: InkWell(
+                    onTap: () => launchUrl(Uri.parse('mailto:$email')),
                     child: Text(
-                      info.layerName.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xff0369a1),
-                        letterSpacing: 0.8,
-                      ),
+                      email,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xff0284c7)),
                     ),
                   ),
-                  const Spacer(),
-                  if (onToggleSave != null)
-                    IconButton(
-                      onPressed: onToggleSave,
-                      icon: Icon(
-                        isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                        color: isSaved ? const Color(0xff0284c7) : const Color(0xff64748b),
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: isSaved ? 'Remove bookmark' : 'Bookmark location',
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  if (logoUrl != null && logoUrl.isNotEmpty) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        logoUrl,
-                        width: 44,
-                        height: 44,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-                  Expanded(
+                ),
+              if (phone != null && phone.isNotEmpty)
+                _InfoRow(
+                  icon: Icons.phone_rounded,
+                  iconColor: const Color(0xff0284c7),
+                  child: InkWell(
+                    onTap: () => launchUrl(Uri.parse('tel:$phone')),
                     child: Text(
-                      info.label,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xff1e293b),
-                      ),
+                      phone,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xff0284c7)),
+                    ),
+                  ),
+                ),
+              if (website != null && website.isNotEmpty)
+                _InfoRow(
+                  icon: Icons.language_rounded,
+                  iconColor: const Color(0xff0284c7),
+                  child: InkWell(
+                    onTap: () {
+                      final uri = Uri.tryParse(website);
+                      if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+                    },
+                    child: Text(
+                      website,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xff0284c7)),
+                    ),
+                  ),
+                ),
+              const Divider(height: 20, color: Color(0xfff1f5f9)),
+              Row(
+                children: const [
+                  Icon(Icons.access_time_filled_rounded, size: 16, color: Color(0xff10b981)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Open for Sabasaba Fair Exhibition',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xff065f46),
                     ),
                   ),
                 ],
@@ -134,236 +636,502 @@ class FeatureDetailsPanel extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
 
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _FeatureAction(
-              icon: Icons.map_rounded,
-              label: 'View on map',
-              onTap: onViewOnMap,
-            ),
-            if (onToggleSave != null)
-              _FeatureAction(
-                icon: isSaved
-                    ? Icons.bookmark_rounded
-                    : Icons.bookmark_border_rounded,
-                label: isSaved ? 'Saved' : 'Save',
-                onTap: onToggleSave!,
-                active: isSaved,
+        // Products & Offers Showcase Teaser
+        if (offerings != null && offerings.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xfff5f3ff), Color(0xfffaf5ff)],
               ),
-            _FeatureAction(
-              icon: Icons.share_rounded,
-              label: 'Share',
-              onTap: onShare,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xffddd6fe)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: const [
+                        Icon(Icons.card_giftcard_rounded, size: 16, color: Color(0xff7c3aed)),
+                        SizedBox(width: 6),
+                        Text(
+                          'PRODUCTS & OFFERS SHOWCASE',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xff5b21b6),
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                    InkWell(
+                      onTap: () => setState(() => _activeTab = 'offerings'),
+                      child: Text(
+                        'View All (${offerings.length})',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xff7c3aed),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                for (final item in offerings.take(3)) ...[
+                  InkWell(
+                    onTap: () => setState(() => _selectedOfferingModal = item),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(bottom: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xffede9fe)),
+                      ),
+                      child: Row(
+                        children: [
+                          if (item.imageUrl != null && item.imageUrl!.isNotEmpty) ...[
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Image.network(
+                                item.imageUrl!,
+                                width: 38,
+                                height: 38,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.title ?? 'Item',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xff1e293b),
+                                  ),
+                                ),
+                                if (item.priceText != null)
+                                  Text(
+                                    item.priceText!,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xff059669),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ── Tab 2: Products & Offers ───────────────────────────────────────────────
+  Widget _buildOfferingsTab(List<Offering>? offerings) {
+    if (offerings == null || offerings.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(32),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xffe2e8f0)),
+        ),
+        child: Column(
+          children: const [
+            Icon(Icons.inventory_2_outlined, size: 36, color: Color(0xffcbd5e1)),
+            SizedBox(height: 8),
+            Text(
+              'No products or special offers listed for this space.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Color(0xff94a3b8)),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+      );
+    }
 
-        // Photos gallery
-        if (photos != null && photos.isNotEmpty) ...[
-          SizedBox(
-            height: 100,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: photos.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, idx) {
-                final photoUrl = _featureMediaUrl(photos[idx]);
-                if (photoUrl == null) return const SizedBox.shrink();
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.network(
-                    photoUrl,
-                    width: 140,
-                    height: 100,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                  ),
-                );
-              },
+    return Column(
+      children: offerings.map((item) {
+        return InkWell(
+          onTap: () => setState(() => _selectedOfferingModal = item),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xffe2e8f0)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x08000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // Exhibitor card
-        if (info.companyName != null || props['company_name'] != null) ...[
-          _ExhibitorCard(properties: props),
-          const SizedBox(height: 12),
-        ],
-
-        // Offerings (Products & Services)
-        if (offerings != null && offerings.isNotEmpty) ...[
-          const Text(
-            'OFFERINGS & PRODUCTS',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xff64748b),
-              letterSpacing: 0.8,
-            ),
-          ),
-          const SizedBox(height: 8),
-          for (final offering in offerings) ...[
-            Container(
-              padding: const EdgeInsets.all(10),
-              margin: const EdgeInsets.only(bottom: 6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xffe2e8f0)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: offering.type == 'service'
-                          ? const Color(0xfffef3c7)
-                          : const Color(0xffdbeafe),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      (offering.type ?? 'Product').toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: offering.type == 'service'
-                            ? const Color(0xffd97706)
-                            : const Color(0xff2563eb),
-                      ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (item.imageUrl != null && item.imageUrl!.isNotEmpty) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      item.imageUrl!,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          offering.title ?? 'Offering',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xff1e293b),
-                          ),
-                        ),
-                        if (offering.description != null && offering.description!.isNotEmpty)
-                          Text(
-                            offering.description!,
-                            style: const TextStyle(fontSize: 11, color: Color(0xff64748b)),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
-                  ),
-                  if (offering.priceText != null && offering.priceText!.isNotEmpty)
-                    Text(
-                      offering.priceText!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xff059669),
-                      ),
-                    ),
+                  const SizedBox(width: 10),
                 ],
-              ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xffe0f2fe),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              (item.type ?? 'PRODUCT').toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xff0369a1),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (item.priceText != null)
+                            Text(
+                              item.priceText!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xff059669),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.title ?? '',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xff0f172a),
+                        ),
+                      ),
+                      if (item.description != null && item.description!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          item.description!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, color: Color(0xff64748b)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ── Tab 3: Team ────────────────────────────────────────────────────────────
+  Widget _buildTeamTab(List<dynamic>? rawTeam) {
+    if (rawTeam == null || rawTeam.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(32),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xffe2e8f0)),
+        ),
+        child: Column(
+          children: const [
+            Icon(Icons.people_outline_rounded, size: 36, color: Color(0xffcbd5e1)),
+            SizedBox(height: 8),
+            Text(
+              'No team members listed for this company.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Color(0xff94a3b8)),
             ),
           ],
-          const SizedBox(height: 12),
-        ],
+        ),
+      );
+    }
 
-        // Team members section
-        if (team != null && team.isNotEmpty) ...[
-          const Text(
-            'BOOTH TEAM MEMBERS',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xff64748b),
-              letterSpacing: 0.8,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: team.map((member) {
-              final name = member is Map
-                  ? (member['fullName'] ?? member['full_name'] ?? member['name'])
-                      ?.toString()
-                  : member.toString();
-              return Chip(
-                avatar: const Icon(Icons.person_rounded, size: 14, color: Color(0xff0284c7)),
-                label: Text(name ?? 'Team Member', style: const TextStyle(fontSize: 11)),
-                backgroundColor: const Color(0xfff1f5f9),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-        ],
+    return Column(
+      children: rawTeam.map((member) {
+        final m = member is Map ? member : {};
+        final name = (m['fullName'] ?? m['full_name'] ?? m['name'])?.toString() ?? 'Team Member';
+        final jobTitle = (m['jobTitle'] ?? m['job_title'] ?? m['title'])?.toString() ?? 'Exhibitor Team';
+        final bio = (m['bio'] ?? m['description'])?.toString();
+        final photoUrl = (m['photoUrl'] ?? m['photo_url'] ?? m['avatar'])?.toString();
 
-        // Properties table
-        _PropertiesTable(properties: props),
-        const SizedBox(height: 16),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xffe2e8f0)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: const Color(0xffe0f2fe),
+                backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                child: photoUrl == null || photoUrl.isEmpty
+                    ? Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : 'T',
+                        style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xff0369a1)),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xff0f172a)),
+                    ),
+                    Text(
+                      jobTitle,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xff0284c7)),
+                    ),
+                    if (bio != null && bio.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        bio,
+                        style: const TextStyle(fontSize: 11, color: Color(0xff64748b), height: 1.3),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
 
-        // Navigation buttons
-        if (hasLocation) ...[
-          ElevatedButton.icon(
-            onPressed: onSetDestination,
-            icon: const Icon(Icons.flag_rounded, color: Color(0xfffda4af), size: 18),
-            label: const Text(
-              'Set as Destination',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xff0284c7),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 2,
-            ),
+  // ── Tab 4: About ───────────────────────────────────────────────────────────
+  Widget _buildAboutTab(String? description, Map<String, dynamic> props) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xffe2e8f0)),
           ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: onSetStart,
-            icon: const Icon(
-              Icons.location_on_rounded,
-              color: Color(0xff10b981),
-              size: 18,
-            ),
-            label: const Text(
-              'Set as Starting Point',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xff334155),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              side: BorderSide(color: Colors.grey.shade300),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'ABOUT COMPANY',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xff94a3b8),
+                  letterSpacing: 0.8,
+                ),
               ),
-            ),
-          ),
-        ] else
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'This spatial boundary cannot be navigated directly.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xff94a3b8),
-                fontStyle: FontStyle.italic,
+              const SizedBox(height: 8),
+              Text(
+                description != null && description.isNotEmpty
+                    ? description
+                    : 'No company description has been provided.',
+                style: const TextStyle(fontSize: 12, height: 1.5, color: Color(0xff334155)),
               ),
-            ),
+            ],
           ),
+        ),
       ],
+    );
+  }
+
+}
+
+class _CircularActionButton extends StatelessWidget {
+  const _CircularActionButton({
+    required this.icon,
+    required this.label,
+    required this.backgroundColor,
+    required this.iconColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color backgroundColor;
+  final Color iconColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(30),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              shape: BoxShape.circle,
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0f000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(icon, size: 20, color: iconColor),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xff334155),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  const _TabButton({
+    required this.label,
+    this.count,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final int? count;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: active ? const Color(0xff0284c7) : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                color: active ? const Color(0xff0284c7) : const Color(0xff64748b),
+              ),
+            ),
+            if (count != null && count! > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: active ? const Color(0xffe0f2fe) : const Color(0xfff1f5f9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: active ? const Color(0xff0369a1) : const Color(0xff64748b),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.iconColor,
+    required this.child,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: iconColor),
+          const SizedBox(width: 10),
+          Expanded(child: child),
+        ],
+      ),
     );
   }
 }
@@ -377,219 +1145,6 @@ String? _featureMediaUrl(dynamic item) {
     }
   }
   return null;
-}
-
-class _FeatureAction extends StatelessWidget {
-  const _FeatureAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.active = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Column(
-          children: [
-            CircleAvatar(
-              radius: 21,
-              backgroundColor:
-                  active ? const Color(0xfff59e0b) : const Color(0xffe0f2fe),
-              child: Icon(
-                icon,
-                size: 20,
-                color: active ? Colors.white : const Color(0xff0369a1),
-              ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Color(0xff475569),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ExhibitorCard extends StatelessWidget {
-  const _ExhibitorCard({required this.properties});
-
-  final Map<String, dynamic> properties;
-
-  @override
-  Widget build(BuildContext context) {
-    final companyName = properties['company_name'] as String?;
-    final allocationStatus =
-        properties['allocation_status'] as String? ?? 'Active';
-    final contactPerson = properties['contact_person'] as String?;
-    final email = properties['email'] as String?;
-    final phone = properties['phone']?.toString();
-    final website = properties['website']?.toString();
-    final description = properties['description']?.toString();
-
-    if (companyName == null) return const SizedBox();
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xfff0fdf4).withOpacity(0.85),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xffa7f3d0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xffa7f3d0).withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'ASSIGNED EXHIBITOR',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xff065f46),
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                allocationStatus.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xff059669),
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            companyName,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: Color(0xff0f172a),
-            ),
-          ),
-          if (contactPerson != null) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Icon(
-                  Icons.person_rounded,
-                  size: 14,
-                  color: Color(0xff059669),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    contactPerson,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xff475569),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (email != null) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(
-                  Icons.email_rounded,
-                  size: 14,
-                  color: Color(0xff059669),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    email,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xff475569),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (phone != null && phone.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            InkWell(
-              onTap: () => launchUrl(Uri.parse('tel:${Uri.encodeComponent(phone)}')),
-              child: Row(
-                children: [
-                  const Icon(Icons.phone_rounded, size: 14, color: Color(0xff059669)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      phone,
-                      style: const TextStyle(fontSize: 12, color: Color(0xff0369a1)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (website != null && website.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            InkWell(
-              onTap: () {
-                final uri = Uri.tryParse(website);
-                if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-              child: Row(
-                children: [
-                  const Icon(Icons.language_rounded, size: 14, color: Color(0xff059669)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      website,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: Color(0xff0369a1)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (description != null && description.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              description,
-              style: const TextStyle(fontSize: 12, height: 1.4, color: Color(0xff475569)),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 }
 
 class _PropertiesTable extends StatelessWidget {
@@ -614,7 +1169,7 @@ class _PropertiesTable extends StatelessWidget {
               'FEATURE PROPERTIES',
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
                 color: Color(0xff64748b),
                 letterSpacing: 0.8,
               ),
@@ -627,13 +1182,6 @@ class _PropertiesTable extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xffe2e8f0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 1),
-              ),
-            ],
           ),
           child: entries.isEmpty
               ? const Padding(
@@ -652,9 +1200,9 @@ class _PropertiesTable extends StatelessWidget {
                   children: [
                     for (var i = 0; i < entries.length; i++) ...[
                       if (i > 0)
-                        Divider(
+                        const Divider(
                           height: 1,
-                          color: Colors.grey.shade100,
+                          color: Color(0xfff1f5f9),
                         ),
                       Padding(
                         padding: const EdgeInsets.symmetric(
