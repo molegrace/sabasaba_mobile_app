@@ -467,7 +467,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                         _mapRotation = _gestureRotationStart + angle;
                       });
                     },
-                    onDoubleTap: () => _zoom(0.82),
+                    onDoubleTap: () => _zoom(1.8),
+
                     onSelectArea: (area) => _onCanvasTap(area, data),
                     route: _currentRoute,
                     startPoint: (_currentRoute != null &&

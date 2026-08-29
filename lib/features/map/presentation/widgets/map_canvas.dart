@@ -66,8 +66,9 @@ class MapCanvas extends StatelessWidget {
               transformationController: controller,
               minScale: minMapScale,
               maxScale: maxMapScale,
-              boundaryMargin: const EdgeInsets.all(36),
+              boundaryMargin: const EdgeInsets.all(double.infinity),
               onInteractionStart: (_) => onRotationStart(),
+
               onInteractionUpdate: (details) {
                 if (details.pointerCount > 1 &&
                     details.rotation.abs() > 0.002) {
@@ -94,6 +95,7 @@ class MapCanvas extends StatelessWidget {
                           selectedArea: selectedArea,
                           selectedService: selectedService,
                           categoryFilter: categoryFilter,
+                          scale: controller.value.getMaxScaleOnAxis(),
                           route: route,
                           startPoint: startPoint,
                           endPoint: endPoint,
@@ -132,6 +134,7 @@ class ExhibitionMapPainter extends CustomPainter {
     required this.selectedArea,
     required this.selectedService,
     this.categoryFilter = 'all',
+    this.scale = 1.0,
     this.route,
     this.startPoint,
     this.endPoint,
@@ -144,27 +147,31 @@ class ExhibitionMapPainter extends CustomPainter {
   final MapFeature? selectedArea;
   final VisitorService? selectedService;
   final String categoryFilter;
+  final double scale;
   final RouteResult? route;
   final GeoPoint? startPoint;
   final GeoPoint? endPoint;
   final GeoPoint? userLocation;
   final double? userLocationAccuracy;
 
+
   @override
   void paint(Canvas canvas, Size size) {
     final projection = data.projectionFor(size);
     final filteredIds = filteredAreas.map((feature) => feature.key).toSet();
 
+    final currentScale = math.max(0.1, scale);
+
     final boundaryPaint = Paint()
       ..color = const Color(0xff0d9488)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
+      ..strokeWidth = 1.5 / currentScale
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     final boundaryHaloPaint = Paint()
       ..color = const Color(0x44ffffff)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
+      ..strokeWidth = 2.5 / currentScale
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     for (final boundary in data.boundaries) {
@@ -188,10 +195,9 @@ class ExhibitionMapPainter extends CustomPainter {
     final roadPaint = Paint()
       ..color = const Color(0xff34d399)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6
+      ..strokeWidth = 0.8 / currentScale
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-
 
     for (final road in data.roads) {
       for (final line in road.lines) {
@@ -207,11 +213,11 @@ class ExhibitionMapPainter extends CustomPainter {
       final stroke = Paint()
         ..color = tree.layerColor
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
+        ..strokeWidth = 1.0 / currentScale;
       for (final point in tree.points) {
         final center = projection.project(point);
-        canvas.drawCircle(center, 6, fill);
-        canvas.drawCircle(center, 6, stroke);
+        canvas.drawCircle(center, 4 / currentScale, fill);
+        canvas.drawCircle(center, 4 / currentScale, stroke);
       }
       for (final polygon in tree.polygons) {
         final path = _polygonPath(polygon, projection);
@@ -222,8 +228,6 @@ class ExhibitionMapPainter extends CustomPainter {
         canvas.drawPath(_linePath(line, projection), stroke);
       }
     }
-
-
 
     for (final building in data.buildings) {
       final isSelected = selectedArea != null &&
@@ -245,10 +249,12 @@ class ExhibitionMapPainter extends CustomPainter {
 
       final strokePaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 3.5 : 1.2
+        ..strokeWidth = (isSelected ? 2.5 : 0.6) / currentScale
         ..color = isSelected
             ? const Color(0xff0f766e)
             : building.layerColor;
+
+
 
       for (final polygon in building.polygons) {
         canvas.drawPath(_polygonPath(polygon, projection), strokePaint);
@@ -376,7 +382,7 @@ class ExhibitionMapPainter extends CustomPainter {
             ..strokeWidth = 1,
         );
       }
-      canvas.drawCircle(center, 9, Paint()..color = Colors.white);
+        canvas.drawCircle(center, 9, Paint()..color = Colors.white);
       canvas.drawCircle(center, 6, Paint()..color = const Color(0xff0284c7));
     }
   }
@@ -411,13 +417,13 @@ class ExhibitionMapPainter extends CustomPainter {
         selectedArea != oldDelegate.selectedArea ||
         selectedService != oldDelegate.selectedService ||
         categoryFilter != oldDelegate.categoryFilter ||
+        scale != oldDelegate.scale ||
         route != oldDelegate.route ||
         startPoint != oldDelegate.startPoint ||
         endPoint != oldDelegate.endPoint ||
         userLocation != oldDelegate.userLocation ||
         userLocationAccuracy != oldDelegate.userLocationAccuracy;
   }
-
 
   void _drawServiceMarker(
     Canvas canvas,
@@ -512,6 +518,7 @@ class ExhibitionMapPainter extends CustomPainter {
       canvas.drawCircle(center, 2.5, roadPaint);
     }
   }
+
 
   Path _polygonPath(List<GeoPoint> polygon, MapProjection projection) {
     final path = Path();
