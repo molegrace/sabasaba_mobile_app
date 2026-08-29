@@ -6,7 +6,10 @@ import 'dart:typed_data';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:sabasaba_mobile_app/features/tickets/presentation/tickets_tab.dart';
 
 part 'features/map/presentation/screens/exhibition_map_screen.dart';
@@ -18,11 +21,13 @@ part 'features/map/presentation/widgets/area_modal.dart';
 part 'features/map/presentation/widgets/left_sidebar.dart';
 part 'features/map/presentation/widgets/navigator_main_panel.dart';
 part 'features/map/presentation/widgets/spaces_panel.dart';
+part 'features/map/presentation/widgets/saved_panel.dart';
 part 'features/map/presentation/widgets/feature_details_panel.dart';
 part 'features/map/presentation/widgets/help_panel.dart';
 part 'features/map/presentation/widgets/legend_overlay.dart';
 part 'features/map/presentation/widgets/info_bar.dart';
 part 'features/map/presentation/widgets/right_toolbar.dart';
+
 part 'features/services/presentation/services_tab.dart';
 part 'features/info/presentation/info_tab.dart';
 part 'features/exhibitor/presentation/exhibitor_tab.dart';

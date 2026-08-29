@@ -24,25 +24,36 @@ class SelectedFeatureInfo {
 /// and Set Destination / Set Starting Point buttons.
 class FeatureDetailsPanel extends StatelessWidget {
   const FeatureDetailsPanel({
+    super.key,
     required this.info,
     required this.onSetDestination,
     required this.onSetStart,
+    this.onToggleSave,
+    this.isSaved = false,
   });
 
   final SelectedFeatureInfo info;
   final VoidCallback onSetDestination;
   final VoidCallback onSetStart;
+  final VoidCallback? onToggleSave;
+  final bool isSaved;
 
   @override
   Widget build(BuildContext context) {
     final props = info.properties;
-    final hasLocation = info.location != null;
+    final loc = info.location;
+    final hasLocation = loc != null;
+
+    final logoUrl = loc?.logoUrl ?? props['logo_url']?.toString();
+    final photos = loc?.photos ?? (props['photos'] is List ? props['photos'] as List : null);
+    final team = loc?.team ?? (props['team'] is List ? props['team'] as List : null);
+    final offerings = loc?.offerings;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Feature header card
+        // Feature header card with logo and bookmark toggle
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -75,33 +86,189 @@ class FeatureDetailsPanel extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    info.id.length > 12 ? info.id.substring(0, 12) : info.id,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Color(0xff94a3b8),
-                      fontFamily: 'monospace',
+                  if (onToggleSave != null)
+                    IconButton(
+                      onPressed: onToggleSave,
+                      icon: Icon(
+                        isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                        color: isSaved ? const Color(0xff0284c7) : const Color(0xff64748b),
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: isSaved ? 'Remove bookmark' : 'Bookmark location',
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              Text(
-                info.label,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xff1e293b),
-                ),
+              Row(
+                children: [
+                  if (logoUrl != null && logoUrl.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        logoUrl,
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: Text(
+                      info.label,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xff1e293b),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
 
+        // Photos gallery
+        if (photos != null && photos.isNotEmpty) ...[
+          SizedBox(
+            height: 100,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: photos.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, idx) {
+                final photoUrl = photos[idx].toString();
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(
+                    photoUrl,
+                    width: 140,
+                    height: 100,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
         // Exhibitor card
         if (info.companyName != null || props['company_name'] != null) ...[
           _ExhibitorCard(properties: props),
+          const SizedBox(height: 12),
+        ],
+
+        // Offerings (Products & Services)
+        if (offerings != null && offerings.isNotEmpty) ...[
+          const Text(
+            'OFFERINGS & PRODUCTS',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xff64748b),
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final offering in offerings) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xffe2e8f0)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: offering.type == 'service'
+                          ? const Color(0xfffef3c7)
+                          : const Color(0xffdbeafe),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      (offering.type ?? 'Product').toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: offering.type == 'service'
+                            ? const Color(0xffd97706)
+                            : const Color(0xff2563eb),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          offering.title ?? 'Offering',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xff1e293b),
+                          ),
+                        ),
+                        if (offering.description != null && offering.description!.isNotEmpty)
+                          Text(
+                            offering.description!,
+                            style: const TextStyle(fontSize: 11, color: Color(0xff64748b)),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (offering.priceText != null && offering.priceText!.isNotEmpty)
+                    Text(
+                      offering.priceText!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xff059669),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+        ],
+
+        // Team members section
+        if (team != null && team.isNotEmpty) ...[
+          const Text(
+            'BOOTH TEAM MEMBERS',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xff64748b),
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: team.map((member) {
+              final name = member is Map ? member['name']?.toString() : member.toString();
+              return Chip(
+                avatar: const Icon(Icons.person_rounded, size: 14, color: Color(0xff0284c7)),
+                label: Text(name ?? 'Team Member', style: const TextStyle(fontSize: 11)),
+                backgroundColor: const Color(0xfff1f5f9),
+              );
+            }).toList(),
+          ),
           const SizedBox(height: 12),
         ],
 

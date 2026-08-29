@@ -1,9 +1,12 @@
 part of '../../../../main.dart';
 
+const String gpsStartId = '__gps_location__';
+
 /// Route input panel — matches the web navigator's route panel content.
 /// Uses dropdowns with emerald/rose icons for start/end locations.
 class RouteInputPanel extends StatelessWidget {
   const RouteInputPanel({
+    super.key,
     required this.locations,
     required this.startId,
     required this.endId,
@@ -12,6 +15,9 @@ class RouteInputPanel extends StatelessWidget {
     required this.onFindRoute,
     required this.onClearRoute,
     this.notice,
+    this.gpsMessage,
+    this.cityRoute,
+    this.onOpenTurnByTurn,
   });
 
   final List<RoutingLocation> locations;
@@ -22,6 +28,9 @@ class RouteInputPanel extends StatelessWidget {
   final VoidCallback onFindRoute;
   final VoidCallback onClearRoute;
   final String? notice;
+  final String? gpsMessage;
+  final CityRouteResult? cityRoute;
+  final VoidCallback? onOpenTurnByTurn;
 
   @override
   Widget build(BuildContext context) {
@@ -30,9 +39,9 @@ class RouteInputPanel extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Start location
-        _RouteLocationLabel(
+        const _RouteLocationLabel(
           icon: Icons.location_on_rounded,
-          iconColor: const Color(0xff10b981),
+          iconColor: Color(0xff10b981),
           label: 'Start Location',
         ),
         const SizedBox(height: 6),
@@ -40,6 +49,7 @@ class RouteInputPanel extends StatelessWidget {
           value: startId.isEmpty ? null : startId,
           hint: 'Select starting point',
           locations: locations,
+          isStartDropdown: true,
           onChanged: (val) {
             if (val != null) onStartChanged(val);
           },
@@ -47,9 +57,9 @@ class RouteInputPanel extends StatelessWidget {
         const SizedBox(height: 14),
 
         // Destination
-        _RouteLocationLabel(
+        const _RouteLocationLabel(
           icon: Icons.flag_rounded,
-          iconColor: const Color(0xfff43f5e),
+          iconColor: Color(0xfff43f5e),
           label: 'Destination',
         ),
         const SizedBox(height: 6),
@@ -57,10 +67,36 @@ class RouteInputPanel extends StatelessWidget {
           value: endId.isEmpty ? null : endId,
           hint: 'Select destination',
           locations: locations,
+          isStartDropdown: false,
           onChanged: (val) {
             if (val != null) onEndChanged(val);
           },
         ),
+
+        // GPS Message
+        if (gpsMessage != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xfff0f9ff),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xffbae6fd)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.my_location_rounded, size: 16, color: Color(0xff0284c7)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    gpsMessage!,
+                    style: const TextStyle(fontSize: 12, color: Color(0xff0369a1)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
 
         // Notice
         if (notice != null) ...[
@@ -81,6 +117,25 @@ class RouteInputPanel extends StatelessWidget {
             ),
           ),
         ],
+
+        // Turn by turn external maps launcher if city route is active
+        if (cityRoute != null && onOpenTurnByTurn != null) ...[
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: onOpenTurnByTurn,
+            icon: const Icon(Icons.turn_right_rounded, size: 18),
+            label: const Text('Turn-by-Turn Directions in Maps'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xff10b981),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+
         const SizedBox(height: 16),
 
         // Find Route button
@@ -161,12 +216,14 @@ class _RouteDropdown extends StatelessWidget {
     required this.value,
     required this.hint,
     required this.locations,
+    required this.isStartDropdown,
     required this.onChanged,
   });
 
   final String? value;
   final String hint;
   final List<RoutingLocation> locations;
+  final bool isStartDropdown;
   final ValueChanged<String?> onChanged;
 
   @override
@@ -201,20 +258,35 @@ class _RouteDropdown extends StatelessWidget {
             color: Color(0xff1e293b),
             fontWeight: FontWeight.w500,
           ),
-          items: locations.map((loc) {
-            return DropdownMenuItem<String>(
-              value: loc.id,
-              child: Text(
-                '${loc.label} — ${loc.description}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13),
+          items: [
+            if (isStartDropdown)
+              const DropdownMenuItem<String>(
+                value: gpsStartId,
+                child: Text(
+                  '📍 Your live GPS location',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xff0284c7),
+                  ),
+                ),
               ),
-            );
-          }).toList(),
+            ...locations.map((loc) {
+              return DropdownMenuItem<String>(
+                value: loc.id,
+                child: Text(
+                  '${loc.label} — ${loc.description}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              );
+            }),
+          ],
           onChanged: onChanged,
         ),
       ),
     );
   }
 }
+

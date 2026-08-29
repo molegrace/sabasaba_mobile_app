@@ -95,10 +95,18 @@ class MapFeature {
     int index,
   ) {
     final featureId = feature['id'] as String?; // database UUID
-    final properties = feature['properties'] as Map<String, dynamic>? ?? {};
+    final properties = feature['properties'] is Map<String, dynamic>
+        ? Map<String, dynamic>.from(feature['properties'] as Map)
+        : <String, dynamic>{
+            if (feature['public_id'] != null) 'id': feature['public_id'],
+            if (feature['label'] != null) 'name': feature['label'],
+            if (feature['code'] != null) 'code': feature['code'],
+            if (feature['status'] != null) 'status': feature['status'],
+          };
     final geometry = feature['geometry'] as Map<String, dynamic>;
     final type = geometry['type'] as String;
     final coordinates = geometry['coordinates'];
+
 
     final polygons = <List<GeoPoint>>[];
     final lines = <List<GeoPoint>>[];

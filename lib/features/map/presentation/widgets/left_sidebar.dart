@@ -28,6 +28,11 @@ class LeftSidebar extends StatelessWidget {
       icon: Icons.signpost_rounded,
     ),
     _SidebarItem(
+      label: 'saved',
+      name: 'Saved Places',
+      icon: Icons.bookmark_rounded,
+    ),
+    _SidebarItem(
       label: 'legend',
       name: 'Map Legend',
       icon: Icons.info_rounded,
@@ -38,6 +43,7 @@ class LeftSidebar extends StatelessWidget {
       icon: Icons.help_rounded,
     ),
   ];
+
 
   @override
   Widget build(BuildContext context) {
