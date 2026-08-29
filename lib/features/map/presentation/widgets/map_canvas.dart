@@ -48,7 +48,7 @@ class MapCanvas extends StatelessWidget {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
 
         return DecoratedBox(
-          decoration: const BoxDecoration(color: Color(0xffdfe7dc)),
+          decoration: const BoxDecoration(color: Color(0xfff2efe9)),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onDoubleTap: onDoubleTap,
@@ -156,7 +156,7 @@ class ExhibitionMapPainter extends CustomPainter {
     final filteredIds = filteredAreas.map((feature) => feature.key).toSet();
 
     final boundaryPaint = Paint()
-      ..color = const Color(0xb8c99b57)
+      ..color = const Color(0xff0d9488)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round
@@ -173,10 +173,10 @@ class ExhibitionMapPainter extends CustomPainter {
         canvas.drawPath(
           path,
           Paint()
-            ..color = boundary.layerFill.withValues(alpha: 0.35)
+            ..color = const Color(0x220d9488)
             ..style = PaintingStyle.fill,
         );
-        canvas.drawPath(path, boundaryPaint..color = boundary.layerColor);
+        canvas.drawPath(path, boundaryPaint);
       }
       for (final line in boundary.lines) {
         final path = _linePath(line, projection);
@@ -186,16 +186,17 @@ class ExhibitionMapPainter extends CustomPainter {
     }
 
     final roadPaint = Paint()
-      ..color = const Color(0xffc8c8c8)
+      ..color = const Color(0xff34d399)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
+
     for (final road in data.roads) {
       for (final line in road.lines) {
         final path = _linePath(line, projection);
-        canvas.drawPath(path, roadPaint..color = road.layerColor);
+        canvas.drawPath(path, roadPaint);
       }
     }
 
@@ -234,8 +235,8 @@ class ExhibitionMapPainter extends CustomPainter {
       final fillPaint = Paint()
         ..style = PaintingStyle.fill
         ..color = isSelected
-            ? const Color(0xa614b8a6)
-            : building.layerFill.withValues(alpha: 0.35);
+            ? const Color(0xff14b8a6)
+            : building.layerFill.withValues(alpha: 0.85);
 
       for (final polygon in building.polygons) {
         final path = _polygonPath(polygon, projection);
@@ -244,10 +245,10 @@ class ExhibitionMapPainter extends CustomPainter {
 
       final strokePaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 4.0 : 2.0
+        ..strokeWidth = isSelected ? 3.5 : 1.2
         ..color = isSelected
             ? const Color(0xff0f766e)
-            : building.layerColor.withValues(alpha: 0.8);
+            : building.layerColor;
 
       for (final polygon in building.polygons) {
         canvas.drawPath(_polygonPath(polygon, projection), strokePaint);

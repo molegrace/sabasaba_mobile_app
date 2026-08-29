@@ -153,6 +153,23 @@ class MapFeature {
     final cHex = colorHex ?? properties['color']?.toString();
     final fHex = fillHex ?? properties['fill']?.toString();
 
+    final defaultColor = layer == Layer.road
+        ? const Color(0xff34d399)
+        : (layer == Layer.boundary
+            ? const Color(0xff0f766e)
+            : (layer == Layer.tree
+                ? const Color(0xff059669)
+                : const Color(0xff374151)));
+
+    final defaultFill = layer == Layer.road
+        ? const Color(0xff34d399)
+
+        : (layer == Layer.boundary
+            ? const Color(0x220d9488)
+            : (layer == Layer.tree
+                ? const Color(0xff10b981)
+                : const Color(0xff949e9b)));
+
     return MapFeature(
       layer: layer,
       index: index,
@@ -165,9 +182,10 @@ class MapFeature {
       rawProperties: properties,
       layerKey: layerKey,
       layerName: layerName,
-      layerColor: _parseHexColor(cHex, const Color(0xff0284c7)),
-      layerFill: _parseHexColor(fHex, const Color(0xff38bdf8)),
+      layerColor: _parseHexColor(cHex, defaultColor),
+      layerFill: _parseHexColor(fHex, defaultFill),
     );
+
   }
 
   static Color _parseHexColor(String? colorStr, Color fallback) {
