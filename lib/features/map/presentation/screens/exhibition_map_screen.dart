@@ -41,6 +41,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   bool _isLeftOpen = false;
   String? _activePanel; // null | 'spaces' | 'route' | 'details' | 'help'
   bool _showLegend = false;
+  bool _isMapFullscreen = false;
   SelectedFeatureInfo? _selectedFeatureInfo;
   MapFeature? _selectedAreaForCanvas;
 
@@ -57,6 +58,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   int _selectedNavIndex = 2; // default to map (index 2)
   bool _exhibitorRegisterMode = false;
   bool _locationAllowed = false;
+  GeoPoint? _userLocation;
+  double? _userLocationAccuracy;
   MapTileStyle _tileStyle = MapTileStyle.openStreetMap;
   UserAccount? _exhibitorAccount;
   String _boothName = 'SabaSaba Exhibitor Booth';
@@ -111,6 +114,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
   @override
   void dispose() {
+    if (_isMapFullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     _connectivitySubscription?.cancel();
     _connectionBannerTimer?.cancel();
     _authNameController.dispose();
@@ -130,7 +136,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: _isMapFullscreen ? null : NavigationBar(
         selectedIndex: _selectedNavIndex,
         onDestinationSelected: (index) {
           setState(() => _selectedNavIndex = index);
@@ -377,6 +383,19 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           loc.description.toLowerCase().contains(q) ||
           (loc.companyName?.toLowerCase().contains(q) ?? false) ||
           (loc.industry?.toLowerCase().contains(q) ?? false) ||
+          (loc.industries?.any((item) => item.toLowerCase().contains(q)) ??
+              false) ||
+          (loc.offerings?.any(
+                (item) => [
+                  item.type,
+                  item.title,
+                  item.description,
+                  item.priceText,
+                ].whereType<String>().any(
+                      (value) => value.toLowerCase().contains(q),
+                    ),
+              ) ??
+              false) ||
           (loc.searchTerms?.any((t) => t.toLowerCase().contains(q)) ?? false);
 
       if (!matchesSearch) return false;
@@ -407,8 +426,20 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isDesktop = constraints.maxWidth >= 600;
-          final searchShowingResults =
-              _searchQuery.trim().isNotEmpty && _activePanel == 'spaces';
+          final isFiltering = _searchQuery.trim().isNotEmpty ||
+              (_categoryFilter != 'all' && _categoryFilter != 'more');
+          final matchingFeatureIds = filteredLocations
+              .expand((location) => [location.id, location.featureId])
+              .whereType<String>()
+              .toSet();
+          final filteredFeatures = isFiltering
+              ? data.buildings
+                  .where(
+                    (feature) => feature.featureId != null &&
+                        matchingFeatureIds.contains(feature.featureId),
+                  )
+                  .toList()
+              : data.buildings;
 
           return Stack(
             clipBehavior: Clip.hardEdge,
@@ -419,9 +450,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   key: _mapViewportKey,
                   child: MapCanvas(
                     data: data,
-                    filteredAreas: searchShowingResults
-                        ? data.searchBuildings(_searchQuery)
-                        : data.buildings,
+                    filteredAreas: filteredFeatures,
                     selectedArea: _selectedAreaForCanvas,
                     selectedService: _selectedService,
                     tileStyle: _tileStyle,
@@ -451,11 +480,34 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                         ? _findLocation(data.locations, _endLocationId)
                               ?.position
                         : null,
+                    userLocation: _userLocation,
+                    userLocationAccuracy: _userLocationAccuracy,
                   ),
                 ),
               ),
 
               // ── 2. Main panel overlay (when active) ─────────────────────────
+              if (isDesktop || _activePanel == null)
+                Positioned(
+                  top: isDesktop ? 14 : 68,
+                  left: isDesktop ? 400 : 12,
+                  right: isDesktop ? 66 : 12,
+                  child: NavigatorCategoryBar(
+                    categories: displayedCategories,
+                    activeCategory: _categoryFilter,
+                    onSelect: (category) {
+                      setState(() {
+                        if (category == 'more') {
+                          _activePanel = 'filters';
+                        } else {
+                          _categoryFilter = category;
+                          _activePanel = 'spaces';
+                        }
+                      });
+                    },
+                  ),
+                ),
+
               if (_activePanel != null)
                 NavigatorMainPanel(
                   title: _panelTitle(data),
@@ -480,8 +532,14 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     showLegend: _showLegend,
                     onToggleLegend: () =>
                         setState(() => _showLegend = !_showLegend),
-                    onLocateMe: _locateMe,
+                    onLocateMe: () => _locateMe(data),
                     onResetView: () => _resetMapView(data),
+                    onDirections: () => setState(() {
+                      _startLocationId = gpsStartId;
+                      _activePanel = 'route';
+                    }),
+                    isFullscreen: _isMapFullscreen,
+                    onToggleFullscreen: _toggleMapFullscreen,
                   ),
                 ),
 
@@ -695,6 +753,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         return FeatureDetailsPanel(
           info: info,
           isSaved: isSaved,
+          onViewOnMap: () {
+            if (info.location != null) {
+              _focusLocation(info.location!, data);
+            }
+            setState(() => _activePanel = null);
+          },
+          onShare: () => _shareFeature(info),
           onToggleSave: locId != null ? () => _toggleSaveLocation(locId) : null,
           onSetDestination: () {
             if (info.location != null) {
@@ -1047,6 +1112,79 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     });
   }
 
+  Future<void> _toggleMapFullscreen() async {
+    final next = !_isMapFullscreen;
+    await SystemChrome.setEnabledSystemUIMode(
+      next ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    );
+    if (mounted) setState(() => _isMapFullscreen = next);
+  }
+
+  Future<void> _shareFeature(SelectedFeatureInfo info) async {
+    final baseUrl = ExhibitionMapData.navigatorApiUrl.replaceFirst(
+      RegExp(r'/api/map/?$'),
+      '/navigator',
+    );
+    final shareUrl = Uri.parse(baseUrl).replace(
+      queryParameters: {'fid': info.id},
+    ).toString();
+    final message = 'View ${info.companyName ?? info.label} at Sabasaba\n$shareUrl';
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Share this place',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.chat_rounded, color: Color(0xff16a34a)),
+                title: const Text('WhatsApp'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await launchUrl(
+                    Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}'),
+                    mode: LaunchMode.externalApplication,
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.sms_rounded, color: Color(0xff0284c7)),
+                title: const Text('Message'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await launchUrl(Uri.parse('sms:?body=${Uri.encodeComponent(message)}'));
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.link_rounded),
+                title: const Text('Copy link'),
+                onTap: () async {
+                  await Clipboard.setData(ClipboardData(text: shareUrl));
+                  if (!sheetContext.mounted) return;
+                  Navigator.pop(sheetContext);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Navigator link copied.')),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
 
   // ─── Fit route to screen ──────────────────────────────────────────────────
   void _fitRouteToScreen(ExhibitionMapData data, RouteResult route) {
@@ -1119,36 +1257,75 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         current.scaled(adjustedFactor, adjustedFactor);
   }
 
-  Future<void> _locateMe() async {
-    if (!_locationAllowed) {
-      final allowed = await showDialog<bool>(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Allow location access?'),
-            content: const Text(
-              'SabaSaba needs your device location to locate you on the map.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Not now'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Allow'),
-              ),
-            ],
-          );
-        },
+  Future<void> _locateMe(ExhibitionMapData data) async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw Exception('Location services are disabled. Turn on GPS and try again.');
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied) {
+        throw Exception('Location permission was denied.');
+      }
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception(
+          'Location permission is permanently denied. Enable it in device settings.',
+        );
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
       );
-      if (allowed != true || !mounted) return;
-      setState(() => _locationAllowed = true);
+      final point = GeoPoint(position.longitude, position.latitude);
+      if (!mounted) return;
+      setState(() {
+        _locationAllowed = true;
+        _userLocation = point;
+        _userLocationAccuracy = position.accuracy;
+      });
+      _focusGeoPoint(point, data, targetScale: 6);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
     }
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Location access enabled.')));
+  }
+
+  void _focusGeoPoint(
+    GeoPoint location,
+    ExhibitionMapData data, {
+    double targetScale = 4.5,
+  }) {
+    final renderBox =
+        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+    final size = renderBox.size;
+    final point = data.projectionFor(size).project(location);
+    final scale = targetScale.clamp(minMapScale, maxMapScale);
+    final target = Matrix4.identity()
+      ..translate(
+        size.width / 2 - point.dx * scale,
+        size.height / 2 - point.dy * scale,
+      )
+      ..scale(scale);
+    _mapAnimationController.stop();
+    _mapAnimation = Matrix4Tween(
+      begin: _transformController.value.clone(),
+      end: target,
+    ).animate(
+      CurvedAnimation(
+        parent: _mapAnimationController,
+        curve: Curves.easeInOutCubic,
+      ),
+    );
+    _mapAnimationController.forward(from: 0);
   }
 
   Future<void> _openService(VisitorService service) async {

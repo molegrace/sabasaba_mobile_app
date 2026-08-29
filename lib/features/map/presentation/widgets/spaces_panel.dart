@@ -13,6 +13,71 @@ class _CategoryItem {
   });
 }
 
+/// Floating category chips shown over the map, matching the web navigator.
+class NavigatorCategoryBar extends StatelessWidget {
+  const NavigatorCategoryBar({
+    required this.categories,
+    required this.activeCategory,
+    required this.onSelect,
+  });
+
+  final List<_CategoryItem> categories;
+  final String activeCategory;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        itemCount: categories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 7),
+        itemBuilder: (context, index) {
+          final category = categories[index];
+          final active = category.id == activeCategory;
+          return Material(
+            color: active ? const Color(0xff0284c7) : Colors.white.withValues(alpha: 0.94),
+            elevation: 3,
+            shadowColor: Colors.black26,
+            borderRadius: BorderRadius.circular(999),
+            child: InkWell(
+              onTap: () => onSelect(category.id),
+              borderRadius: BorderRadius.circular(999),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      category.label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: active ? Colors.white : const Color(0xff334155),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${category.count}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: active ? const Color(0xffdbeafe) : const Color(0xff94a3b8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// Spaces panel — matches the web navigator's "spaces" panel content.
 /// Shows horizontal category filter chips and a scrollable list of location cards.
 class SpacesPanel extends StatefulWidget {

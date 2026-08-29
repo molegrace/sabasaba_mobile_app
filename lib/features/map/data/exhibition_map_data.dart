@@ -37,6 +37,7 @@ class _LayerMeta {
   final String name;
   final String? color;
   final String? fill;
+  final bool visible;
 
   const _LayerMeta({
     required this.id,
@@ -44,6 +45,7 @@ class _LayerMeta {
     required this.name,
     this.color,
     this.fill,
+    this.visible = true,
   });
 }
 
@@ -105,6 +107,10 @@ class _RawFeature {
 }
 
 class ExhibitionMapData {
+  static const navigatorApiUrl = String.fromEnvironment(
+    'SABASABA_MAP_API_URL',
+    defaultValue: 'https://77.alphabeti.co.tz/api/map',
+  );
   static const _supabaseUrl = 'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1';
   static const _supabaseKey = 'sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV';
   static const _headers = {
@@ -141,6 +147,328 @@ class ExhibitionMapData {
   // Load from Supabase — single source of truth
   // ---------------------------------------------------------------------------
   static Future<ExhibitionMapData> load() async {
+    Object? apiError;
+    try {
+      return await _loadFromNavigatorApi();
+    } catch (error) {
+      apiError = error;
+      debugPrint('SabaSaba - navigator API unavailable: $error');
+    }
+
+    try {
+      return await _loadFromSupabase();
+    } catch (fallbackError) {
+      throw Exception(
+        'Could not load the navigator map. API error: $apiError. '
+        'Fallback error: $fallbackError',
+      );
+    }
+  }
+
+  static Future<ExhibitionMapData> _loadFromNavigatorApi() async {
+    final response = await http
+        .get(
+          Uri.parse(navigatorApiUrl),
+          headers: const {'Accept': 'application/json'},
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Navigator API returned ${response.statusCode}: ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('Navigator API returned an invalid payload.');
+    }
+    final root = Map<String, dynamic>.from(decoded);
+    final rawData = root['data'];
+    if (rawData is! Map) {
+      final rawError = root['error'];
+      final message = rawError is Map ? rawError['message'] : rawError;
+      throw FormatException(message?.toString() ?? 'Navigator map data is missing.');
+    }
+    final data = Map<String, dynamic>.from(rawData);
+    final rawLayers = data['layers'] is List ? data['layers'] as List : const [];
+    final nodes = (data['routingNodes'] is List
+            ? data['routingNodes'] as List
+            : const [])
+        .whereType<Map>()
+        .map((row) => RoutingNode.fromJson(Map<String, dynamic>.from(row)))
+        .toList();
+    final edges = (data['routingEdges'] is List
+            ? data['routingEdges'] as List
+            : const [])
+        .whereType<Map>()
+        .map((row) => RoutingEdge.fromJson(Map<String, dynamic>.from(row)))
+        .toList();
+
+    final buildings = <MapFeature>[];
+    final roads = <MapFeature>[];
+    final trees = <MapFeature>[];
+    final boundaries = <MapFeature>[];
+    final rawNavigableFeatures = <_RawFeature>[];
+    final layerMetaById = <String, _LayerMeta>{};
+
+    for (final rawLayer in rawLayers.whereType<Map>()) {
+      final layer = Map<String, dynamic>.from(rawLayer);
+      final editorKey =
+          layer['editor_key']?.toString() ?? layer['id']?.toString() ?? '';
+      final layerId = layer['id']?.toString() ?? editorKey;
+      final layerName = layer['name']?.toString() ?? editorKey;
+      final meta = _LayerMeta(
+        id: layerId,
+        editorKey: editorKey,
+        name: layerName,
+        color: layer['color']?.toString(),
+        fill: layer['fill']?.toString(),
+        visible: layer['visible'] as bool? ?? true,
+      );
+      layerMetaById[layerId] = meta;
+
+      final rawFeatures =
+          layer['features'] is List ? layer['features'] as List : const [];
+      final targetLayer = editorKey == 'roads'
+          ? Layer.road
+          : editorKey == 'trees'
+              ? Layer.tree
+              : editorKey == 'boundary'
+                  ? Layer.boundary
+                  : Layer.building;
+
+      for (var index = 0; index < rawFeatures.length; index++) {
+        final rawFeature = rawFeatures[index];
+        if (rawFeature is! Map) continue;
+        final feature = Map<String, dynamic>.from(rawFeature);
+        if (feature['geometry'] is! Map) continue;
+
+        final parsed = MapFeature.fromJson(
+          feature,
+          targetLayer,
+          index,
+          colorHex: meta.color,
+          fillHex: meta.fill,
+          layerKey: editorKey,
+          layerName: layerName,
+        );
+        switch (targetLayer) {
+          case Layer.road:
+            roads.add(parsed);
+          case Layer.tree:
+            trees.add(parsed);
+          case Layer.boundary:
+            boundaries.add(parsed);
+          case Layer.building:
+            buildings.add(parsed);
+        }
+
+        if (targetLayer == Layer.building) {
+          rawNavigableFeatures.add(
+            _RawFeature.fromJson({...feature, 'layer_id': layerId}),
+          );
+        }
+      }
+    }
+
+    final locations = nodes.isEmpty
+        ? <RoutingLocation>[]
+        : _buildLocations(rawNavigableFeatures, nodes, layerMetaById);
+    _appendNavigationDestinations(
+      locations,
+      data['navigationDestinations'],
+      buildings,
+      nodes,
+    );
+    locations.sort((left, right) => left.label.compareTo(right.label));
+
+    final allPoints = [
+      for (final feature in [...buildings, ...roads, ...trees, ...boundaries])
+        ...feature.allPoints,
+    ];
+    if (allPoints.isEmpty) {
+      throw const FormatException(
+        'Navigator API returned no renderable geometry.',
+      );
+    }
+
+    return ExhibitionMapData(
+      buildings: buildings,
+      roads: roads,
+      trees: trees,
+      boundaries: boundaries,
+      bounds: GeoBounds.fromPoints(allPoints),
+      nodes: nodes,
+      edges: edges,
+      locations: locations,
+    );
+  }
+
+  static List<RoutingLocation> _buildLocations(
+    List<_RawFeature> features,
+    List<RoutingNode> nodes,
+    Map<String, _LayerMeta> layerMetaById,
+  ) {
+    final locations = <RoutingLocation>[];
+    for (var index = 0; index < features.length; index++) {
+      final rawFeature = features[index];
+      final position = rawFeature.center;
+      if (position == null) continue;
+      final layerName = layerMetaById[rawFeature.layerId]?.name ?? '';
+      final props = rawFeature.properties;
+      final rawCompany = props['company_name'] ??
+          props['companyName'] ??
+          props['company'] ??
+          props['exhibitor'];
+      final companyName =
+          rawCompany != null && rawCompany.toString().trim().isNotEmpty
+              ? rawCompany.toString().trim()
+              : null;
+      final rawIndustry = props['industry'] ??
+          props['industry_name'] ??
+          props['sector'] ??
+          props['category'];
+      final industries = props['industries'] is List
+          ? (props['industries'] as List)
+              .map((item) => item.toString())
+              .toList()
+          : rawIndustry == null
+              ? <String>[]
+              : [rawIndustry.toString()];
+      final offerings = props['offerings'] is List
+          ? (props['offerings'] as List)
+              .whereType<Map>()
+              .map(
+                (item) => Offering.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .toList()
+          : null;
+      final baseValue = props['name'] ??
+          props['booth_code'] ??
+          props['number'] ??
+          props['1'] ??
+          props['id'];
+      final labelText = baseValue?.toString() ?? '$layerName ${index + 1}';
+      final boothNumber = props['booth_number']?.toString();
+      final boothTag = boothNumber == null || boothNumber.isEmpty
+          ? ''
+          : ' • ${boothNumber.startsWith('Booth') ? boothNumber : 'Booth $boothNumber'}';
+      final label = companyName == null ? labelText : '$labelText ($companyName)';
+      final description = companyName == null
+          ? layerName
+          : 'Exhibitor: $companyName$boothTag'
+              '${industries.isEmpty ? '' : ' (${industries.join(', ')})'} • $layerName';
+
+      locations.add(
+        RoutingLocation(
+          id: rawFeature.id,
+          featureId: rawFeature.id,
+          label: label,
+          description: description,
+          position: position,
+          nodeId: nearestNode(position, nodes).id,
+          layerName: layerName,
+          companyName: companyName,
+          industry: industries.firstOrNull,
+          industries: industries.isEmpty ? null : industries,
+          logoUrl: props['logo_url']?.toString(),
+          photos: props['photos'] is List ? props['photos'] as List : null,
+          team: props['team'] is List ? props['team'] as List : null,
+          offerings: offerings,
+          searchTerms: [
+            if (boothNumber != null) boothNumber,
+            layerName,
+            if (props['legacy_products'] != null)
+              props['legacy_products'].toString(),
+          ],
+          properties: props,
+        ),
+      );
+    }
+    return locations;
+  }
+
+  static void _appendNavigationDestinations(
+    List<RoutingLocation> locations,
+    dynamic rawDestinations,
+    List<MapFeature> features,
+    List<RoutingNode> nodes,
+  ) {
+    if (rawDestinations is! List || nodes.isEmpty) return;
+    final featureById = {
+      for (final feature in features)
+        if (feature.featureId != null) feature.featureId!: feature,
+    };
+    for (final rawDestination in rawDestinations.whereType<Map>()) {
+      final destination = Map<String, dynamic>.from(rawDestination);
+      final hallFeatureId = destination['hall_feature_id']?.toString();
+      final hallFeature = featureById[hallFeatureId];
+      if (hallFeature == null) continue;
+      final id = destination['id']?.toString();
+      final companyName = destination['company_name']?.toString();
+      final boothNumber = destination['booth_number']?.toString();
+      if (id == null || companyName == null || boothNumber == null) continue;
+      final industries = destination['industries'] is List
+          ? (destination['industries'] as List)
+              .map((item) => item.toString())
+              .toList()
+          : <String>[];
+      final offerings = destination['offerings'] is List
+          ? (destination['offerings'] as List)
+              .whereType<Map>()
+              .map(
+                (item) => Offering.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .toList()
+          : null;
+      final hallName =
+          destination['hall_name']?.toString() ?? hallFeature.layerName;
+      final properties = <String, dynamic>{
+        'company_name': companyName,
+        'company_id': destination['company_id'],
+        'description': destination['description'],
+        'logo_url': destination['logo_url'],
+        'photos': destination['photos'],
+        'team': destination['team'],
+        'industries': industries,
+        'industry': industries.firstOrNull,
+        'offerings': destination['offerings'],
+        'booth_number': boothNumber,
+      };
+      locations.add(
+        RoutingLocation(
+          id: id,
+          featureId: hallFeatureId,
+          label: '$companyName · Booth $boothNumber',
+          description: 'Booth $boothNumber · $hallName',
+          position: hallFeature.center,
+          nodeId: nearestNode(hallFeature.center, nodes).id,
+          layerName: hallName,
+          companyName: companyName,
+          industry: industries.firstOrNull,
+          industries: industries.isEmpty ? null : industries,
+          logoUrl: destination['logo_url']?.toString(),
+          photos: destination['photos'] is List
+              ? destination['photos'] as List
+              : null,
+          team: destination['team'] is List
+              ? destination['team'] as List
+              : null,
+          offerings: offerings,
+          searchTerms: [
+            boothNumber,
+            hallName,
+            if (destination['legacy_products'] != null)
+              destination['legacy_products'].toString(),
+          ],
+          properties: properties,
+        ),
+      );
+    }
+  }
+
+  static Future<ExhibitionMapData> _loadFromSupabase() async {
     try {
       // 1. Find the latest ongoing or closed exhibition
       final exhibitionResponse = await http
@@ -190,7 +518,7 @@ class ExhibitionMapData {
       final layersResponse = await http
           .get(
             Uri.parse(
-              '$_supabaseUrl/layers?map_id=eq.$mapId&select=id,editor_key,name,color,fill',
+              '$_supabaseUrl/layers?map_id=eq.$mapId&select=id,editor_key,name,color,fill,visible',
             ),
             headers: _headers,
           )
@@ -221,6 +549,7 @@ class ExhibitionMapData {
             name: name,
             color: color,
             fill: fill,
+            visible: item['visible'] as bool? ?? true,
           );
           layerMetaById[id] = meta;
           allLayerMeta.add(meta);
@@ -228,20 +557,30 @@ class ExhibitionMapData {
       }
 
       // 4. Fetch canvas feature sets
-      const buildingLayerKeys = ['booths', 'spaces', 'buildings'];
-      final buildingLayerIds = buildingLayerKeys
-          .map((k) => layerIdByKey[k])
-          .whereType<String>()
+      const nonNavigableKeys = {'roads', 'boundary', 'trees'};
+      final buildingLayerIds = allLayerMeta
+          .where(
+            (layer) =>
+                layer.visible && !nonNavigableKeys.contains(layer.editorKey),
+          )
+          .map((layer) => layer.id)
           .toList();
 
-      final roadLayerId = layerIdByKey['roads'];
-      final treeLayerId = layerIdByKey['trees'];
-      final boundaryLayerId = layerIdByKey['boundary'];
+      String? visibleLayerId(String key) {
+        final id = layerIdByKey[key];
+        return id != null && (layerMetaById[id]?.visible ?? true) ? id : null;
+      }
+
+      final roadLayerId = visibleLayerId('roads');
+      final treeLayerId = visibleLayerId('trees');
+      final boundaryLayerId = visibleLayerId('boundary');
 
       // 5. Determine navigable layer IDs (all except roads/trees/boundary)
-      const skipKeys = {'roads', 'boundary', 'trees'};
       final navigableLayerIds = allLayerMeta
-          .where((l) => !skipKeys.contains(l.editorKey))
+          .where(
+            (layer) =>
+                layer.visible && !nonNavigableKeys.contains(layer.editorKey),
+          )
           .map((l) => l.id)
           .toList();
 
@@ -438,6 +777,8 @@ class ExhibitionMapData {
           indexOffset + i,
           colorHex: layerMeta?.color,
           fillHex: layerMeta?.fill,
+          layerKey: layerMeta?.editorKey ?? '',
+          layerName: layerMeta?.name ?? '',
         ),
     ];
   }
@@ -534,8 +875,38 @@ class ExhibitionMapData {
         }
         if ((path..close()).contains(scenePoint)) return building;
       }
+      for (final point in building.points) {
+        if ((projection.project(point) - scenePoint).distance <= 12) {
+          return building;
+        }
+      }
+      for (final line in building.lines) {
+        final projected = line.map(projection.project).toList();
+        for (var index = 1; index < projected.length; index++) {
+          if (_distanceToSegment(
+                scenePoint,
+                projected[index - 1],
+                projected[index],
+              ) <=
+              8) {
+            return building;
+          }
+        }
+      }
     }
     return null;
+  }
+
+  static double _distanceToSegment(Offset point, Offset start, Offset end) {
+    final segment = end - start;
+    final lengthSquared = segment.dx * segment.dx + segment.dy * segment.dy;
+    if (lengthSquared == 0) return (point - start).distance;
+    final relative = point - start;
+    final ratio = ((relative.dx * segment.dx + relative.dy * segment.dy) /
+            lengthSquared)
+        .clamp(0.0, 1.0);
+    final closest = start + segment * ratio;
+    return (point - closest).distance;
   }
 
   MapProjection projectionFor(Size size) {

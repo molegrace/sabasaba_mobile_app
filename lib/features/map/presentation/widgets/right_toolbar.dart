@@ -10,6 +10,9 @@ class NavigatorRightToolbar extends StatefulWidget {
     required this.onToggleLegend,
     required this.onLocateMe,
     required this.onResetView,
+    required this.onDirections,
+    required this.isFullscreen,
+    required this.onToggleFullscreen,
   });
 
   final MapTileStyle tileStyle;
@@ -18,6 +21,9 @@ class NavigatorRightToolbar extends StatefulWidget {
   final VoidCallback onToggleLegend;
   final VoidCallback onLocateMe;
   final VoidCallback onResetView;
+  final VoidCallback onDirections;
+  final bool isFullscreen;
+  final VoidCallback onToggleFullscreen;
 
   @override
   State<NavigatorRightToolbar> createState() => _NavigatorRightToolbarState();
@@ -91,6 +97,23 @@ class _NavigatorRightToolbarState extends State<NavigatorRightToolbar> {
           icon: Icons.adjust_rounded,
           tooltip: 'Center Map / Reset View',
           onTap: widget.onResetView,
+        ),
+        const SizedBox(height: 8),
+
+        _ToolbarButton(
+          icon: Icons.turn_right_rounded,
+          iconColor: const Color(0xff0284c7),
+          tooltip: 'Directions',
+          onTap: widget.onDirections,
+        ),
+        const SizedBox(height: 8),
+
+        _ToolbarButton(
+          icon: widget.isFullscreen
+              ? Icons.fullscreen_exit_rounded
+              : Icons.fullscreen_rounded,
+          tooltip: widget.isFullscreen ? 'Exit Full Screen' : 'Full Screen',
+          onTap: widget.onToggleFullscreen,
         ),
         const SizedBox(height: 8),
 

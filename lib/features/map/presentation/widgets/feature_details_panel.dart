@@ -30,6 +30,8 @@ class FeatureDetailsPanel extends StatelessWidget {
     required this.onSetStart,
     this.onToggleSave,
     this.isSaved = false,
+    required this.onViewOnMap,
+    required this.onShare,
   });
 
   final SelectedFeatureInfo info;
@@ -37,6 +39,8 @@ class FeatureDetailsPanel extends StatelessWidget {
   final VoidCallback onSetStart;
   final VoidCallback? onToggleSave;
   final bool isSaved;
+  final VoidCallback onViewOnMap;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -132,6 +136,32 @@ class FeatureDetailsPanel extends StatelessWidget {
         ),
         const SizedBox(height: 12),
 
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _FeatureAction(
+              icon: Icons.map_rounded,
+              label: 'View on map',
+              onTap: onViewOnMap,
+            ),
+            if (onToggleSave != null)
+              _FeatureAction(
+                icon: isSaved
+                    ? Icons.bookmark_rounded
+                    : Icons.bookmark_border_rounded,
+                label: isSaved ? 'Saved' : 'Save',
+                onTap: onToggleSave!,
+                active: isSaved,
+              ),
+            _FeatureAction(
+              icon: Icons.share_rounded,
+              label: 'Share',
+              onTap: onShare,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
         // Photos gallery
         if (photos != null && photos.isNotEmpty) ...[
           SizedBox(
@@ -141,7 +171,8 @@ class FeatureDetailsPanel extends StatelessWidget {
               itemCount: photos.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, idx) {
-                final photoUrl = photos[idx].toString();
+                final photoUrl = _featureMediaUrl(photos[idx]);
+                if (photoUrl == null) return const SizedBox.shrink();
                 return ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: Image.network(
@@ -261,7 +292,10 @@ class FeatureDetailsPanel extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: team.map((member) {
-              final name = member is Map ? member['name']?.toString() : member.toString();
+              final name = member is Map
+                  ? (member['fullName'] ?? member['full_name'] ?? member['name'])
+                      ?.toString()
+                  : member.toString();
               return Chip(
                 avatar: const Icon(Icons.person_rounded, size: 14, color: Color(0xff0284c7)),
                 label: Text(name ?? 'Team Member', style: const TextStyle(fontSize: 11)),
@@ -334,6 +368,65 @@ class FeatureDetailsPanel extends StatelessWidget {
   }
 }
 
+String? _featureMediaUrl(dynamic item) {
+  if (item is String && item.trim().isNotEmpty) return item;
+  if (item is Map) {
+    final value = item['url'] ?? item['imageUrl'] ?? item['image_url'];
+    if (value != null && value.toString().trim().isNotEmpty) {
+      return value.toString();
+    }
+  }
+  return null;
+}
+
+class _FeatureAction extends StatelessWidget {
+  const _FeatureAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 21,
+              backgroundColor:
+                  active ? const Color(0xfff59e0b) : const Color(0xffe0f2fe),
+              child: Icon(
+                icon,
+                size: 20,
+                color: active ? Colors.white : const Color(0xff0369a1),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xff475569),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ExhibitorCard extends StatelessWidget {
   const _ExhibitorCard({required this.properties});
 
@@ -346,6 +439,9 @@ class _ExhibitorCard extends StatelessWidget {
         properties['allocation_status'] as String? ?? 'Active';
     final contactPerson = properties['contact_person'] as String?;
     final email = properties['email'] as String?;
+    final phone = properties['phone']?.toString();
+    final website = properties['website']?.toString();
+    final description = properties['description']?.toString();
 
     if (companyName == null) return const SizedBox();
 
@@ -440,6 +536,54 @@ class _ExhibitorCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+          if (phone != null && phone.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () => launchUrl(Uri.parse('tel:${Uri.encodeComponent(phone)}')),
+              child: Row(
+                children: [
+                  const Icon(Icons.phone_rounded, size: 14, color: Color(0xff059669)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      phone,
+                      style: const TextStyle(fontSize: 12, color: Color(0xff0369a1)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (website != null && website.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () {
+                final uri = Uri.tryParse(website);
+                if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              child: Row(
+                children: [
+                  const Icon(Icons.language_rounded, size: 14, color: Color(0xff059669)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      website,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: Color(0xff0369a1)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (description != null && description.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              description,
+              style: const TextStyle(fontSize: 12, height: 1.4, color: Color(0xff475569)),
             ),
           ],
         ],

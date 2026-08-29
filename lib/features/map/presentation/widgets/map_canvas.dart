@@ -18,6 +18,8 @@ class MapCanvas extends StatelessWidget {
     this.route,
     this.startPoint,
     this.endPoint,
+    this.userLocation,
+    this.userLocationAccuracy,
   });
 
   final ExhibitionMapData data;
@@ -36,6 +38,8 @@ class MapCanvas extends StatelessWidget {
   final RouteResult? route;
   final GeoPoint? startPoint;
   final GeoPoint? endPoint;
+  final GeoPoint? userLocation;
+  final double? userLocationAccuracy;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +97,8 @@ class MapCanvas extends StatelessWidget {
                           route: route,
                           startPoint: startPoint,
                           endPoint: endPoint,
+                          userLocation: userLocation,
+                          userLocationAccuracy: userLocationAccuracy,
                         ),
                       ),
                     ],
@@ -129,6 +135,8 @@ class ExhibitionMapPainter extends CustomPainter {
     this.route,
     this.startPoint,
     this.endPoint,
+    this.userLocation,
+    this.userLocationAccuracy,
   });
 
   final ExhibitionMapData data;
@@ -139,6 +147,8 @@ class ExhibitionMapPainter extends CustomPainter {
   final RouteResult? route;
   final GeoPoint? startPoint;
   final GeoPoint? endPoint;
+  final GeoPoint? userLocation;
+  final double? userLocationAccuracy;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -158,6 +168,16 @@ class ExhibitionMapPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     for (final boundary in data.boundaries) {
+      for (final polygon in boundary.polygons) {
+        final path = _polygonPath(polygon, projection);
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = boundary.layerFill.withValues(alpha: 0.35)
+            ..style = PaintingStyle.fill,
+        );
+        canvas.drawPath(path, boundaryPaint..color = boundary.layerColor);
+      }
       for (final line in boundary.lines) {
         final path = _linePath(line, projection);
         canvas.drawPath(path, boundaryHaloPaint);
@@ -175,7 +195,30 @@ class ExhibitionMapPainter extends CustomPainter {
     for (final road in data.roads) {
       for (final line in road.lines) {
         final path = _linePath(line, projection);
-        canvas.drawPath(path, roadPaint);
+        canvas.drawPath(path, roadPaint..color = road.layerColor);
+      }
+    }
+
+    for (final tree in data.trees) {
+      final fill = Paint()
+        ..color = tree.layerFill.withValues(alpha: 0.9)
+        ..style = PaintingStyle.fill;
+      final stroke = Paint()
+        ..color = tree.layerColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
+      for (final point in tree.points) {
+        final center = projection.project(point);
+        canvas.drawCircle(center, 6, fill);
+        canvas.drawCircle(center, 6, stroke);
+      }
+      for (final polygon in tree.polygons) {
+        final path = _polygonPath(polygon, projection);
+        canvas.drawPath(path, fill);
+        canvas.drawPath(path, stroke);
+      }
+      for (final line in tree.lines) {
+        canvas.drawPath(_linePath(line, projection), stroke);
       }
     }
 
@@ -188,13 +231,11 @@ class ExhibitionMapPainter extends CustomPainter {
               : selectedArea!.key == building.key);
       final isFiltered = filteredIds.contains(building.key);
 
-      final buildingColor = building.rawProperties['company_name'] != null
-          ? const Color(0xff1aa987) // allocated exhibitor: solid teal
-          : const Color(0xffb0b0b0); // unallocated: solid grey
-
       final fillPaint = Paint()
         ..style = PaintingStyle.fill
-        ..color = isSelected ? const Color(0xff14b8a6) : buildingColor;
+        ..color = isSelected
+            ? const Color(0xa614b8a6)
+            : building.layerFill.withValues(alpha: 0.35);
 
       for (final polygon in building.polygons) {
         final path = _polygonPath(polygon, projection);
@@ -203,13 +244,23 @@ class ExhibitionMapPainter extends CustomPainter {
 
       final strokePaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 3.0 : 0.8
+        ..strokeWidth = isSelected ? 4.0 : 2.0
         ..color = isSelected
             ? const Color(0xff0f766e)
-            : const Color(0xcc124e43);
+            : building.layerColor.withValues(alpha: 0.8);
 
       for (final polygon in building.polygons) {
         canvas.drawPath(_polygonPath(polygon, projection), strokePaint);
+      }
+
+      for (final line in building.lines) {
+        canvas.drawPath(_linePath(line, projection), strokePaint);
+      }
+
+      for (final point in building.points) {
+        final center = projection.project(point);
+        canvas.drawCircle(center, isSelected ? 9 : 6, fillPaint);
+        canvas.drawCircle(center, isSelected ? 9 : 6, strokePaint);
       }
 
       if (!isSelected && isFiltered && filteredAreas.length < 24) {
@@ -300,6 +351,33 @@ class ExhibitionMapPainter extends CustomPainter {
     if (service != null) {
       _drawServiceMarker(canvas, service, projection);
     }
+
+    final liveLocation = userLocation;
+    if (liveLocation != null) {
+      final center = projection.project(liveLocation);
+      final accuracy = userLocationAccuracy ?? 0;
+      if (accuracy > 0) {
+        final edge = projection.project(
+          GeoPoint(liveLocation.lng, liveLocation.lat + accuracy / 111320),
+        );
+        final radius = (edge - center).distance.clamp(10.0, 80.0);
+        canvas.drawCircle(
+          center,
+          radius,
+          Paint()..color = const Color(0x2238bdf8),
+        );
+        canvas.drawCircle(
+          center,
+          radius,
+          Paint()
+            ..color = const Color(0x990284c7)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1,
+        );
+      }
+      canvas.drawCircle(center, 9, Paint()..color = Colors.white);
+      canvas.drawCircle(center, 6, Paint()..color = const Color(0xff0284c7));
+    }
   }
 
   void _drawDashedPolyline(Canvas canvas, List<Offset> points, Paint paint) {
@@ -334,7 +412,9 @@ class ExhibitionMapPainter extends CustomPainter {
         categoryFilter != oldDelegate.categoryFilter ||
         route != oldDelegate.route ||
         startPoint != oldDelegate.startPoint ||
-        endPoint != oldDelegate.endPoint;
+        endPoint != oldDelegate.endPoint ||
+        userLocation != oldDelegate.userLocation ||
+        userLocationAccuracy != oldDelegate.userLocationAccuracy;
   }
 
 

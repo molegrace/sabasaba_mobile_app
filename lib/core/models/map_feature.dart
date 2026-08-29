@@ -11,6 +11,8 @@ class MapFeature {
     required this.lines,
     required this.points,
     required this.rawProperties,
+    this.layerKey = '',
+    this.layerName = '',
     this.layerColor = const Color(0xff0284c7),
     this.layerFill = const Color(0xff38bdf8),
   });
@@ -26,6 +28,9 @@ class MapFeature {
   final List<GeoPoint> points;
   /// Full raw properties map from Supabase for use in the detail panel.
   final Map<String, dynamic> rawProperties;
+  /// The editor key and display name supplied by the map manager.
+  final String layerKey;
+  final String layerName;
   final Color layerColor;
   final Color layerFill;
 
@@ -99,6 +104,8 @@ class MapFeature {
     int index, {
     String? colorHex,
     String? fillHex,
+    String layerKey = '',
+    String layerName = '',
   }) {
     final featureId = feature['id'] as String?; // database UUID
     final properties = feature['properties'] is Map<String, dynamic>
@@ -117,12 +124,18 @@ class MapFeature {
     final lines = <List<GeoPoint>>[];
     final points = <GeoPoint>[];
 
-    if (type == 'MultiPolygon') {
+    if (type == 'Polygon') {
+      for (final ring in coordinates as List<dynamic>) {
+        polygons.add(_parseLine(ring as List<dynamic>));
+      }
+    } else if (type == 'MultiPolygon') {
       for (final polygonGroup in coordinates as List<dynamic>) {
         for (final ring in polygonGroup as List<dynamic>) {
           polygons.add(_parseLine(ring as List<dynamic>));
         }
       }
+    } else if (type == 'LineString') {
+      lines.add(_parseLine(coordinates as List<dynamic>));
     } else if (type == 'MultiLineString') {
       for (final line in coordinates as List<dynamic>) {
         lines.add(_parseLine(line as List<dynamic>));
@@ -150,6 +163,8 @@ class MapFeature {
       lines: lines,
       points: points,
       rawProperties: properties,
+      layerKey: layerKey,
+      layerName: layerName,
       layerColor: _parseHexColor(cHex, const Color(0xff0284c7)),
       layerFill: _parseHexColor(fHex, const Color(0xff38bdf8)),
     );
