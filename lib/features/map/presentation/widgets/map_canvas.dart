@@ -160,9 +160,9 @@ class ExhibitionMapPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final projection = data.projectionFor(size);
-    final filteredIds = filteredAreas.map((feature) => feature.key).toSet();
 
     final currentScale = math.max(0.1, scale);
+
 
     final boundaryPaint = Paint()
       ..color = const Color(0xff0d9488)
@@ -236,12 +236,12 @@ class ExhibitionMapPainter extends CustomPainter {
           (selectedArea!.featureId != null
               ? selectedArea!.featureId == building.featureId
               : selectedArea!.key == building.key);
-      final isFiltered = filteredIds.contains(building.key);
 
       final fillPaint = Paint()
+
         ..style = PaintingStyle.fill
         ..color = isSelected
-            ? const Color(0xff14b8a6)
+            ? const Color(0x9914b8a6)
             : building.layerFill.withValues(alpha: 0.85);
 
       for (final polygon in building.polygons) {
@@ -251,12 +251,10 @@ class ExhibitionMapPainter extends CustomPainter {
 
       final strokePaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = (isSelected ? 2.5 : 0.6) / currentScale
+        ..strokeWidth = (isSelected ? 2.0 : 0.6) / currentScale
         ..color = isSelected
-            ? const Color(0xff0f766e)
+            ? const Color(0xff0d9488)
             : building.layerColor;
-
-
 
       for (final polygon in building.polygons) {
         canvas.drawPath(_polygonPath(polygon, projection), strokePaint);
@@ -268,39 +266,35 @@ class ExhibitionMapPainter extends CustomPainter {
 
       for (final point in building.points) {
         final center = projection.project(point);
-        canvas.drawCircle(center, isSelected ? 9 : 6, fillPaint);
-        canvas.drawCircle(center, isSelected ? 9 : 6, strokePaint);
-      }
-
-      if (!isSelected && isFiltered && filteredAreas.length < 24) {
-        _drawLabel(canvas, building, projection, isSelected);
+        final r = (isSelected ? 4.0 : 3.0) / currentScale;
+        canvas.drawCircle(center, r, fillPaint);
+        canvas.drawCircle(center, r, strokePaint);
       }
     }
 
-
-
     _drawRoundabouts(canvas, projection);
 
-    // Draw red filter indicator dots on top of matching features when categoryFilter != 'all'
+    // Draw small compact indicator dots on top of matching features (fixed size when zooming)
     if (categoryFilter != 'all' && categoryFilter != 'more') {
+      final dotRadius = 3.5 / currentScale;
       final redDotFill = Paint()
         ..color = const Color(0xffef4444)
         ..style = PaintingStyle.fill;
       final redDotBorder = Paint()
         ..color = Colors.white
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0;
+        ..strokeWidth = 1.0 / currentScale;
 
       for (final feature in filteredAreas) {
         final center = projection.project(feature.center);
-        canvas.drawCircle(center, 7, redDotFill);
-        canvas.drawCircle(center, 7, redDotBorder);
+        canvas.drawCircle(center, dotRadius, redDotFill);
+        canvas.drawCircle(center, dotRadius, redDotBorder);
       }
     }
 
 
-    // Paint route polyline if found
     final activeRoute = route;
+
     if (activeRoute != null && startPoint != null && endPoint != null) {
       final routePoints = <Offset>[];
       final nodeById = {for (final node in data.nodes) node.id: node};
@@ -318,25 +312,6 @@ class ExhibitionMapPainter extends CustomPainter {
           ..color = const Color(0xff0284c7) // sky-600 - matches web
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.8
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round;
-
-        _drawDashedPolyline(canvas, routePoints, routePaint);
-
-        // Paint start as an emerald dot (matching web's emerald-500).
-        final startOffset = projection.project(startPoint!);
-        canvas.drawCircle(startOffset, 5, Paint()..color = Colors.white);
-        canvas.drawCircle(
-          startOffset,
-          4,
-          Paint()..color = const Color(0xff10b981), // emerald-500
-        );
-
-        // Paint the destination as a rose location pin (matching web's rose-500).
-        final endOffset = projection.project(endPoint!);
-        final destinationPainter = TextPainter(
-          text: TextSpan(
-            text: String.fromCharCode(Icons.location_pin.codePoint),
             style: TextStyle(
               color: const Color(0xfff43f5e), // rose-500 - matches web
               fontSize: 16,
@@ -472,40 +447,8 @@ class ExhibitionMapPainter extends CustomPainter {
     textPainter.paint(canvas, Offset(labelRect.left + 10, labelRect.top + 5));
   }
 
-  void _drawLabel(
-    Canvas canvas,
-    MapFeature building,
-    MapProjection projection,
-    bool selected,
-  ) {
-    final center = projection.project(building.center);
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: building.title,
-        style: TextStyle(
-          color: selected ? Colors.white : const Color(0xff073f36),
-          fontWeight: FontWeight.w800,
-          fontSize: selected ? 14 : 11,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: center.translate(0, -20),
-        width: textPainter.width + 16,
-        height: textPainter.height + 8,
-      ),
-      const Radius.circular(8),
-    );
-    canvas.drawRRect(
-      rect,
-      Paint()..color = selected ? const Color(0xff0b4238) : Colors.white,
-    );
-    textPainter.paint(canvas, Offset(rect.left + 8, rect.top + 4));
-  }
-
   void _drawRoundabouts(Canvas canvas, MapProjection projection) {
+
     final roadPaint = Paint()
       ..color = const Color(0xffc8c8c8)
       ..style = PaintingStyle.fill;
