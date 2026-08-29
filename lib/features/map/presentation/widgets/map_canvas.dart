@@ -179,14 +179,7 @@ class ExhibitionMapPainter extends CustomPainter {
       }
     }
 
-    // Paint trees (green dots matching web)
-    final treePaint = Paint()
-      ..color = const Color(0xff15803d)
-      ..style = PaintingStyle.fill;
-    for (final tree in data.trees) {
-      final center = projection.project(tree.center);
-      canvas.drawCircle(center, 3.5, treePaint);
-    }
+
 
     for (final building in data.buildings) {
       final isSelected = selectedArea != null &&
@@ -196,8 +189,8 @@ class ExhibitionMapPainter extends CustomPainter {
       final isFiltered = filteredIds.contains(building.key);
 
       final buildingColor = building.rawProperties['company_name'] != null
-          ? const Color(0xff1aa987) // allocated exhibitor: teal
-          : const Color(0xffb0b0b0); // unallocated: gray
+          ? const Color(0xff1aa987) // allocated exhibitor: solid teal
+          : const Color(0xffb0b0b0); // unallocated: solid grey
 
       final fillPaint = Paint()
         ..style = PaintingStyle.fill
@@ -207,21 +200,24 @@ class ExhibitionMapPainter extends CustomPainter {
         final path = _polygonPath(polygon, projection);
         canvas.drawPath(path, fillPaint);
       }
-      final stroke = Paint()
+
+      final strokePaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 3.5 : 0.5
+        ..strokeWidth = isSelected ? 3.0 : 0.8
         ..color = isSelected
             ? const Color(0xff0f766e)
             : const Color(0xcc124e43);
 
       for (final polygon in building.polygons) {
-        canvas.drawPath(_polygonPath(polygon, projection), stroke);
+        canvas.drawPath(_polygonPath(polygon, projection), strokePaint);
       }
 
       if (!isSelected && isFiltered && filteredAreas.length < 24) {
         _drawLabel(canvas, building, projection, isSelected);
       }
     }
+
+
 
     _drawRoundabouts(canvas, projection);
 

@@ -11,6 +11,8 @@ class MapFeature {
     required this.lines,
     required this.points,
     required this.rawProperties,
+    this.layerColor = const Color(0xff0284c7),
+    this.layerFill = const Color(0xff38bdf8),
   });
 
   final Layer layer;
@@ -24,6 +26,8 @@ class MapFeature {
   final List<GeoPoint> points;
   /// Full raw properties map from Supabase for use in the detail panel.
   final Map<String, dynamic> rawProperties;
+  final Color layerColor;
+  final Color layerFill;
 
   String get key => '${layer.name}-$index-${featureId ?? id ?? code ?? 'feature'}';
 
@@ -92,8 +96,10 @@ class MapFeature {
   factory MapFeature.fromJson(
     Map<String, dynamic> feature,
     Layer layer,
-    int index,
-  ) {
+    int index, {
+    String? colorHex,
+    String? fillHex,
+  }) {
     final featureId = feature['id'] as String?; // database UUID
     final properties = feature['properties'] is Map<String, dynamic>
         ? Map<String, dynamic>.from(feature['properties'] as Map)
@@ -106,7 +112,6 @@ class MapFeature {
     final geometry = feature['geometry'] as Map<String, dynamic>;
     final type = geometry['type'] as String;
     final coordinates = geometry['coordinates'];
-
 
     final polygons = <List<GeoPoint>>[];
     final lines = <List<GeoPoint>>[];
@@ -132,6 +137,9 @@ class MapFeature {
         properties['1'] ??
         properties['id'];
 
+    final cHex = colorHex ?? properties['color']?.toString();
+    final fHex = fillHex ?? properties['fill']?.toString();
+
     return MapFeature(
       layer: layer,
       index: index,
@@ -142,8 +150,27 @@ class MapFeature {
       lines: lines,
       points: points,
       rawProperties: properties,
+      layerColor: _parseHexColor(cHex, const Color(0xff0284c7)),
+      layerFill: _parseHexColor(fHex, const Color(0xff38bdf8)),
     );
   }
+
+  static Color _parseHexColor(String? colorStr, Color fallback) {
+    if (colorStr == null || colorStr.trim().isEmpty) return fallback;
+    final str = colorStr.trim();
+    if (str.startsWith('#')) {
+      final hex = str.replaceAll('#', '');
+      if (hex.length == 6) {
+        final val = int.tryParse('ff$hex', radix: 16);
+        if (val != null) return Color(val);
+      } else if (hex.length == 8) {
+        final val = int.tryParse(hex, radix: 16);
+        if (val != null) return Color(val);
+      }
+    }
+    return fallback;
+  }
+
 
   static List<GeoPoint> _parseLine(List<dynamic> line) {
     return line.map((point) => _parsePoint(point as List<dynamic>)).toList();

@@ -246,10 +246,10 @@ class ExhibitionMapData {
           .toList();
 
       // 6. Fetch all data in parallel
-      final buildingsFuture = _fetchFeatures(buildingLayerIds, Layer.building);
-      final roadsFuture = _fetchFeaturesForLayer(roadLayerId, Layer.road);
-      final treesFuture = _fetchFeaturesForLayer(treeLayerId, Layer.tree);
-      final boundariesFuture = _fetchFeaturesForLayer(boundaryLayerId, Layer.boundary);
+      final buildingsFuture = _fetchFeatures(buildingLayerIds, Layer.building, layerMetaById);
+      final roadsFuture = _fetchFeaturesForLayer(roadLayerId, Layer.road, layerMeta: layerMetaById[roadLayerId]);
+      final treesFuture = _fetchFeaturesForLayer(treeLayerId, Layer.tree, layerMeta: layerMetaById[treeLayerId]);
+      final boundariesFuture = _fetchFeaturesForLayer(boundaryLayerId, Layer.boundary, layerMeta: layerMetaById[boundaryLayerId]);
       final nodesFuture = _fetchNodes(mapId);
       final edgesFuture = _fetchEdges(mapId);
       // Fetch all navigable features in a single request
@@ -398,8 +398,11 @@ class ExhibitionMapData {
   static Future<List<MapFeature>> _fetchFeatures(
     List<String> layerIds,
     Layer layer,
+    Map<String, _LayerMeta> layerMetaById,
   ) async {
-    final futures = layerIds.map((id) => _fetchFeaturesForLayer(id, layer));
+    final futures = layerIds.map(
+      (id) => _fetchFeaturesForLayer(id, layer, layerMeta: layerMetaById[id]),
+    );
     final results = await Future.wait(futures);
     final merged = <MapFeature>[];
     for (final list in results) {
@@ -413,6 +416,7 @@ class ExhibitionMapData {
     String? layerId,
     Layer layer, {
     int indexOffset = 0,
+    _LayerMeta? layerMeta,
   }) async {
     if (layerId == null) return [];
     final response = await http
@@ -432,6 +436,8 @@ class ExhibitionMapData {
           list[i] as Map<String, dynamic>,
           layer,
           indexOffset + i,
+          colorHex: layerMeta?.color,
+          fillHex: layerMeta?.fill,
         ),
     ];
   }
