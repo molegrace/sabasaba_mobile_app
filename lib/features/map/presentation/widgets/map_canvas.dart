@@ -14,6 +14,7 @@ class MapCanvas extends StatelessWidget {
     required this.onRotationUpdate,
     required this.onDoubleTap,
     required this.onSelectArea,
+    this.categoryFilter = 'all',
     this.route,
     this.startPoint,
     this.endPoint,
@@ -31,6 +32,7 @@ class MapCanvas extends StatelessWidget {
   final ValueChanged<double> onRotationUpdate;
   final VoidCallback onDoubleTap;
   final ValueChanged<MapFeature> onSelectArea;
+  final String categoryFilter;
   final RouteResult? route;
   final GeoPoint? startPoint;
   final GeoPoint? endPoint;
@@ -87,6 +89,7 @@ class MapCanvas extends StatelessWidget {
                           filteredAreas: filteredAreas,
                           selectedArea: selectedArea,
                           selectedService: selectedService,
+                          categoryFilter: categoryFilter,
                           route: route,
                           startPoint: startPoint,
                           endPoint: endPoint,
@@ -122,6 +125,7 @@ class ExhibitionMapPainter extends CustomPainter {
     required this.filteredAreas,
     required this.selectedArea,
     required this.selectedService,
+    this.categoryFilter = 'all',
     this.route,
     this.startPoint,
     this.endPoint,
@@ -131,6 +135,7 @@ class ExhibitionMapPainter extends CustomPainter {
   final List<MapFeature> filteredAreas;
   final MapFeature? selectedArea;
   final VisitorService? selectedService;
+  final String categoryFilter;
   final RouteResult? route;
   final GeoPoint? startPoint;
   final GeoPoint? endPoint;
@@ -174,6 +179,15 @@ class ExhibitionMapPainter extends CustomPainter {
       }
     }
 
+    // Paint trees (green dots matching web)
+    final treePaint = Paint()
+      ..color = const Color(0xff15803d)
+      ..style = PaintingStyle.fill;
+    for (final tree in data.trees) {
+      final center = projection.project(tree.center);
+      canvas.drawCircle(center, 3.5, treePaint);
+    }
+
     for (final building in data.buildings) {
       final isSelected = selectedArea != null &&
           (selectedArea!.featureId != null
@@ -187,7 +201,7 @@ class ExhibitionMapPainter extends CustomPainter {
 
       final fillPaint = Paint()
         ..style = PaintingStyle.fill
-        ..color = isSelected ? const Color(0xff0d9488) : buildingColor;
+        ..color = isSelected ? const Color(0xff14b8a6) : buildingColor;
 
       for (final polygon in building.polygons) {
         final path = _polygonPath(polygon, projection);
@@ -195,9 +209,9 @@ class ExhibitionMapPainter extends CustomPainter {
       }
       final stroke = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.5
+        ..strokeWidth = isSelected ? 3.5 : 0.5
         ..color = isSelected
-            ? const Color(0xff70210d)
+            ? const Color(0xff0f766e)
             : const Color(0xcc124e43);
 
       for (final polygon in building.polygons) {
@@ -210,6 +224,24 @@ class ExhibitionMapPainter extends CustomPainter {
     }
 
     _drawRoundabouts(canvas, projection);
+
+    // Draw red filter indicator dots on top of matching features when categoryFilter != 'all'
+    if (categoryFilter != 'all' && categoryFilter != 'more') {
+      final redDotFill = Paint()
+        ..color = const Color(0xffef4444)
+        ..style = PaintingStyle.fill;
+      final redDotBorder = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+
+      for (final feature in filteredAreas) {
+        final center = projection.project(feature.center);
+        canvas.drawCircle(center, 7, redDotFill);
+        canvas.drawCircle(center, 7, redDotBorder);
+      }
+    }
+
 
     // Paint route polyline if found
     final activeRoute = route;
@@ -303,10 +335,12 @@ class ExhibitionMapPainter extends CustomPainter {
         filteredAreas != oldDelegate.filteredAreas ||
         selectedArea != oldDelegate.selectedArea ||
         selectedService != oldDelegate.selectedService ||
+        categoryFilter != oldDelegate.categoryFilter ||
         route != oldDelegate.route ||
         startPoint != oldDelegate.startPoint ||
         endPoint != oldDelegate.endPoint;
   }
+
 
   void _drawServiceMarker(
     Canvas canvas,

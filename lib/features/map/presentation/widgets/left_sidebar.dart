@@ -18,19 +18,24 @@ class LeftSidebar extends StatelessWidget {
 
   static const _menuItems = [
     _SidebarItem(
-      label: 'spaces',
-      name: 'Exhibition Spaces',
-      icon: Icons.location_city_rounded,
+      label: 'route',
+      name: 'Navigation',
+      icon: Icons.alt_route_rounded,
     ),
     _SidebarItem(
-      label: 'route',
-      name: 'Route Finder',
-      icon: Icons.signpost_rounded,
+      label: 'spaces',
+      name: 'Existing Things',
+      icon: Icons.business_rounded,
     ),
     _SidebarItem(
       label: 'saved',
-      name: 'Saved Places',
+      name: 'Saved Locations',
       icon: Icons.bookmark_rounded,
+    ),
+    _SidebarItem(
+      label: 'filters',
+      name: 'Filters',
+      icon: Icons.tune_rounded,
     ),
     _SidebarItem(
       label: 'legend',
@@ -43,6 +48,7 @@ class LeftSidebar extends StatelessWidget {
       icon: Icons.help_rounded,
     ),
   ];
+
 
 
   @override

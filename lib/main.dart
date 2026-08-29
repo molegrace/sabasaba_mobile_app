@@ -22,6 +22,8 @@ part 'features/map/presentation/widgets/left_sidebar.dart';
 part 'features/map/presentation/widgets/navigator_main_panel.dart';
 part 'features/map/presentation/widgets/spaces_panel.dart';
 part 'features/map/presentation/widgets/saved_panel.dart';
+part 'features/map/presentation/widgets/filters_panel.dart';
+
 part 'features/map/presentation/widgets/feature_details_panel.dart';
 part 'features/map/presentation/widgets/help_panel.dart';
 part 'features/map/presentation/widgets/legend_overlay.dart';

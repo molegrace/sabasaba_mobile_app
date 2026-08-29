@@ -287,52 +287,120 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
   // ─── Build the full navigator map view ────────────────────────────────────
   Widget _buildMapView(ExhibitionMapData data) {
-    // Compute category data for SpacesPanel
+    // Compute category counts & filter list (exact parity with Next.js)
     final categoryCounts = <String, int>{
       'all': data.locations.length,
       'exhibitors': 0,
     };
+
     for (final loc in data.locations) {
-      if (loc.companyName != null) {
-        categoryCounts['exhibitors'] =
-            (categoryCounts['exhibitors'] ?? 0) + 1;
+      final isExhibitor = loc.companyName != null && loc.companyName!.trim().isNotEmpty;
+      if (isExhibitor) {
+        categoryCounts['exhibitors'] = (categoryCounts['exhibitors'] ?? 0) + 1;
       }
+
+      final indList = (loc.industries != null && loc.industries!.isNotEmpty)
+          ? loc.industries!
+          : (loc.industry != null ? [loc.industry!] : <String>[]);
+
+      for (final ind in indList) {
+        if (ind.trim().isNotEmpty) {
+          final indKey = 'ind:$ind';
+          categoryCounts[indKey] = (categoryCounts[indKey] ?? 0) + 1;
+        }
+      }
+
       if (loc.layerName.isNotEmpty) {
-        categoryCounts[loc.layerName] =
-            (categoryCounts[loc.layerName] ?? 0) + 1;
+        final layerKey = 'layer:${loc.layerName}';
+        categoryCounts[layerKey] = (categoryCounts[layerKey] ?? 0) + 1;
       }
     }
 
     final availableCategories = <_CategoryItem>[
       _CategoryItem(id: 'all', label: 'All', count: categoryCounts['all'] ?? 0),
-      if ((categoryCounts['exhibitors'] ?? 0) > 0)
-        _CategoryItem(
-          id: 'exhibitors',
-          label: 'Exhibitors',
-          count: categoryCounts['exhibitors']!,
-        ),
-      ...categoryCounts.entries
-          .where(
-            (e) => e.key != 'all' && e.key != 'exhibitors' && e.value > 0,
-          )
-          .map((e) => _CategoryItem(id: e.key, label: e.key, count: e.value)),
+      _CategoryItem(
+        id: 'exhibitors',
+        label: 'Exhibitors',
+        count: categoryCounts['exhibitors'] ?? 0,
+      ),
     ];
 
+    // Industry categories (sorted alphabetically)
+    final indKeys = categoryCounts.keys
+        .where((key) => key.startsWith('ind:') && (categoryCounts[key] ?? 0) > 0)
+        .toList()
+      ..sort();
+
+    for (final key in indKeys) {
+      final industryLabel = key.replaceFirst('ind:', '');
+      availableCategories.add(
+        _CategoryItem(
+          id: key,
+          label: industryLabel,
+          count: categoryCounts[key]!,
+        ),
+      );
+    }
+
+    // Layer categories (sorted alphabetically)
+    final layerKeys = categoryCounts.keys
+        .where((key) => key.startsWith('layer:') && (categoryCounts[key] ?? 0) > 0)
+        .toList()
+      ..sort();
+
+    for (final key in layerKeys) {
+      final layerLabel = key.replaceFirst('layer:', '');
+      availableCategories.add(
+        _CategoryItem(
+          id: key,
+          label: layerLabel,
+          count: categoryCounts[key]!,
+        ),
+      );
+    }
+
+    final displayedCategories = availableCategories.length <= 10
+        ? availableCategories
+        : [
+            ...availableCategories.take(9),
+            _CategoryItem(
+              id: 'more',
+              label: 'More',
+              count: availableCategories.length - 9,
+            ),
+          ];
+
     final filteredLocations = data.locations.where((loc) {
-      final matchesSearch = _searchQuery.trim().isEmpty ||
-          loc.label.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          loc.description.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (loc.companyName?.toLowerCase().contains(_searchQuery.toLowerCase()) ??
-              false);
+      final q = _searchQuery.trim().toLowerCase();
+      final matchesSearch = q.isEmpty ||
+          loc.label.toLowerCase().contains(q) ||
+          loc.description.toLowerCase().contains(q) ||
+          (loc.companyName?.toLowerCase().contains(q) ?? false) ||
+          (loc.industry?.toLowerCase().contains(q) ?? false) ||
+          (loc.searchTerms?.any((t) => t.toLowerCase().contains(q)) ?? false);
+
       if (!matchesSearch) return false;
-      if (_categoryFilter == 'all') return true;
-      if (_categoryFilter == 'exhibitors') return loc.companyName != null;
-      return loc.layerName == _categoryFilter;
+
+      if (_categoryFilter == 'all' || _categoryFilter == 'more') return true;
+      if (_categoryFilter == 'exhibitors') {
+        return loc.companyName != null && loc.companyName!.trim().isNotEmpty;
+      }
+      if (_categoryFilter.startsWith('ind:')) {
+        final targetInd = _categoryFilter.replaceFirst('ind:', '');
+        return (loc.industries != null && loc.industries!.contains(targetInd)) ||
+            loc.industry == targetInd;
+      }
+      if (_categoryFilter.startsWith('layer:')) {
+        final targetLayer = _categoryFilter.replaceFirst('layer:', '');
+        return loc.layerName == targetLayer;
+      }
+      return loc.layerName == _categoryFilter || loc.industry == _categoryFilter;
     }).toList();
 
     // Start/end labels for info bar
     final startLoc = _findLocation(data.locations, _startLocationId);
     final endLoc = _findLocation(data.locations, _endLocationId);
+
 
     return SafeArea(
       bottom: false,
@@ -360,7 +428,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     tileRefreshGeneration: _tileRefreshGeneration,
                     rotation: _mapRotation,
                     controller: _transformController,
+                    categoryFilter: _categoryFilter,
                     onRotationStart: () {
+
                       _gestureRotationStart = _mapRotation;
                     },
                     onRotationUpdate: (angle) {
@@ -392,10 +462,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   onClose: () => setState(() => _activePanel = null),
                   child: _buildPanelContent(
                     data,
+                    displayedCategories,
                     availableCategories,
                     filteredLocations,
                   ),
                 ),
+
 
               // ── 3. Right toolbar (always on desktop, hidden on mobile when panel open)
               if (isDesktop || _activePanel == null)
@@ -515,11 +587,15 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   String _panelTitle(ExhibitionMapData data) {
     switch (_activePanel) {
       case 'route':
-        return 'Route Finder';
+        return 'Navigation';
       case 'spaces':
-        return 'Exhibition Grounds & Exhibitors';
+        return 'Existing Things';
       case 'saved':
-        return 'Saved Places (${_savedIds.length})';
+        return 'Saved Locations (${_savedIds.length})';
+      case 'filters':
+        return 'Filters & Categories';
+      case 'legend':
+        return 'Map Legend';
       case 'help':
         return 'Navigator Guide';
       case 'details':
@@ -532,18 +608,24 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   // ─── Panel content ────────────────────────────────────────────────────────
   Widget _buildPanelContent(
     ExhibitionMapData data,
-    List<_CategoryItem> categories,
+    List<_CategoryItem> displayedCategories,
+    List<_CategoryItem> availableCategories,
     List<RoutingLocation> filteredLocations,
   ) {
     switch (_activePanel) {
       case 'spaces':
         return SpacesPanel(
           locations: data.locations,
-          categories: categories,
+          categories: displayedCategories,
           filteredLocations: filteredLocations,
           categoryFilter: _categoryFilter,
-          onCategoryChanged: (cat) =>
-              setState(() => _categoryFilter = cat),
+          onCategoryChanged: (cat) {
+            if (cat == 'more') {
+              setState(() => _activePanel = 'filters');
+            } else {
+              setState(() => _categoryFilter = cat);
+            }
+          },
           onSelectLocation: (loc) => _selectLocation(loc, data),
           onSetTarget: (loc) {
             setState(() {
@@ -568,6 +650,18 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           },
           onToggleSave: (id) => _toggleSaveLocation(id),
         );
+
+      case 'filters':
+        return FiltersPanel(
+          categories: availableCategories,
+          activeCategory: _categoryFilter,
+          onSelectCategory: (cat) => setState(() {
+            _categoryFilter = cat;
+            _activePanel = 'spaces';
+          }),
+        );
+
+
 
       case 'route':
         return RouteInputPanel(
@@ -623,6 +717,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
       case 'help':
         return const HelpPanel();
+
+      case 'legend':
+        return const SingleChildScrollView(
+          padding: EdgeInsets.all(16),
+          child: LegendOverlay(),
+        );
+
 
       default:
         return const SizedBox();
