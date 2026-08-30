@@ -304,23 +304,28 @@ class ExhibitionMapPainter extends CustomPainter {
     }
 
     // Paint city driving route polyline if present
-
     final activeCityRoute = cityRoute;
     if (activeCityRoute != null && activeCityRoute.coordinates.isNotEmpty) {
       final cityPoints = activeCityRoute.coordinates
           .map((gp) => projection.project(gp))
           .toList();
-      final cityPaint = Paint()
-        ..color = const Color(0xff6366f1) // indigo-500 driving route
+      final cityHaloPaint = Paint()
+        ..color = const Color(0x446366f1)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5 / currentScale
+        ..strokeWidth = 10.0 / currentScale
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
+      final cityPaint = Paint()
+        ..color = const Color(0xff4f46e5) // indigo-600 driving route
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6.0 / currentScale
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      _drawDashedPolyline(canvas, cityPoints, cityHaloPaint);
       _drawDashedPolyline(canvas, cityPoints, cityPaint);
     }
 
     final activeRoute = route;
-
 
     if (activeRoute != null && startPoint != null && endPoint != null) {
       final routePoints = <Offset>[];
@@ -334,16 +339,28 @@ class ExhibitionMapPainter extends CustomPainter {
         }
       }
 
+      if (routePoints.isEmpty) {
+        routePoints.add(projection.project(startPoint!));
+        routePoints.add(projection.project(endPoint!));
+      }
+
       if (routePoints.isNotEmpty) {
-        final routePaint = Paint()
-          ..color =
-              const Color(0xff0284c7) // sky-600 - matches web
+        final routeHaloPaint = Paint()
+          ..color = const Color(0x440284c7)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.8 / currentScale
+          ..strokeWidth = 8.0 / currentScale
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        final routePaint = Paint()
+          ..color = const Color(0xff0284c7) // sky-600 - matches web
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4.5 / currentScale
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round;
 
+        _drawDashedPolyline(canvas, routePoints, routeHaloPaint);
         _drawDashedPolyline(canvas, routePoints, routePaint);
+
 
         // Paint start as an emerald dot (fixed size when zooming)
         final startOffset = projection.project(startPoint!);

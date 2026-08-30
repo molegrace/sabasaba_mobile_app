@@ -1000,25 +1000,27 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       return;
     }
 
-    final start = _findLocation(data.locations, _startLocationId);
-    final end = _findLocation(data.locations, _endLocationId);
+    final start = _findLocation(data.locations, _startLocationId, data);
+    final end = _findLocation(data.locations, _endLocationId, data);
     if (start == null || end == null) {
       setState(() => _routeNotice = 'Location not found.');
       return;
     }
 
-    final result = findNavigableRoute(
+    var result = findNavigableRoute(
       start.nodeId,
       end.nodeId,
       data.nodes,
       data.edges,
     );
-    if (result == null) {
-      setState(
-        () => _routeNotice = 'No path was found between these locations.',
-      );
-      return;
-    }
+
+    result ??= RouteResult(
+      nodeIds: [start.nodeId, end.nodeId],
+      distance: ((start.position.lat - end.position.lat).abs() +
+              (start.position.lng - end.position.lng).abs()) *
+          111000,
+    );
+
 
     setState(() {
       _cityRoute = null;
@@ -1029,13 +1031,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && identical(_currentRoute, result)) {
-        _fitRouteToScreen(data, result);
+        _fitRouteToScreen(data, result!);
       }
     });
   }
 
   Future<void> _navigateFromGpsToDestination(ExhibitionMapData data) async {
-    final destination = _findLocation(data.locations, _endLocationId);
+    final destination = _findLocation(data.locations, _endLocationId, data);
     if (destination == null) {
       setState(
         () =>
@@ -1047,69 +1049,89 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     setState(() => _gpsMessage = 'Locating your current GPS position...');
 
     try {
-      final permission = await Geolocator.checkPermission();
+      var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
-        final req = await Geolocator.requestPermission();
-        if (req == LocationPermission.denied ||
-            req == LocationPermission.deniedForever) {
-          throw Exception('Location permission was denied.');
-        }
+        permission = await Geolocator.requestPermission();
       }
 
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
         ),
       );
 
-      setState(() => _gpsMessage = 'Connecting city route to Gate 1...');
+      final userPoint = GeoPoint(position.longitude, position.latitude);
+      setState(() {
+        _userLocation = userPoint;
+        _userLocationAccuracy = position.accuracy;
+        _gpsMessage = 'Connecting route to ${destination.label}...';
+      });
+      _startLiveLocationStream();
 
       const gateLat = -6.86392;
       const gateLng = 39.27701;
+      final gateGeo = const GeoPoint(gateLng, gateLat);
 
-      final gateNode = nearestNode(GeoPoint(gateLng, gateLat), data.nodes);
-      final fairgroundRoute = findNavigableRoute(
+      final gateNode = nearestNode(gateGeo, data.nodes);
+      var fairgroundRoute = findNavigableRoute(
         gateNode.id,
         destination.nodeId,
         data.nodes,
         data.edges,
       );
-      if (fairgroundRoute == null) {
-        throw Exception('No path found from Gate 1 to ${destination.label}.');
-      }
 
-      final url = Uri.parse(
-        'https://router.project-osrm.org/route/v1/driving/'
-        '${position.longitude},${position.latitude};$gateLng,$gateLat'
-        '?overview=full&geometries=geojson&steps=false',
+      fairgroundRoute ??= RouteResult(
+        nodeIds: [gateNode.id, destination.nodeId],
+        distance: ((gateLat - destination.position.lat).abs() +
+                (gateLng - destination.position.lng).abs()) *
+            111000,
       );
 
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200) {
-        throw Exception(
-          'City driving route could not be calculated right now.',
+
+      List<GeoPoint> coords = [];
+      double distance = 0;
+      double duration = 0;
+
+      try {
+        final url = Uri.parse(
+          'https://router.project-osrm.org/route/v1/driving/'
+          '${position.longitude},${position.latitude};$gateLng,$gateLat'
+          '?overview=full&geometries=geojson&steps=false',
         );
+
+        final response =
+            await http.get(url).timeout(const Duration(seconds: 8));
+        if (response.statusCode == 200) {
+          final payload = jsonDecode(response.body) as Map<String, dynamic>;
+          final routes = payload['routes'] as List<dynamic>?;
+          if (routes != null && routes.isNotEmpty) {
+            final firstRoute = routes.first as Map<String, dynamic>;
+            distance = (firstRoute['distance'] as num).toDouble();
+            duration = (firstRoute['duration'] as num).toDouble();
+            final geometry = firstRoute['geometry'] as Map<String, dynamic>;
+            final rawCoords = geometry['coordinates'] as List<dynamic>;
+
+            coords = rawCoords.map((c) {
+              final pair = c as List<dynamic>;
+              return GeoPoint(
+                (pair[0] as num).toDouble(),
+                (pair[1] as num).toDouble(),
+              );
+            }).toList();
+          }
+        }
+      } catch (_) {
+        // Fallback straight-line city connection if OSRM is offline/unreachable
       }
 
-      final payload = jsonDecode(response.body) as Map<String, dynamic>;
-      final routes = payload['routes'] as List<dynamic>?;
-      if (routes == null || routes.isEmpty) {
-        throw Exception('No driving route found to Sabasaba Gate 1.');
+      if (coords.isEmpty) {
+        coords = [userPoint, gateGeo];
+        distance = ((position.latitude - gateLat).abs() +
+                (position.longitude - gateLng).abs()) *
+            111000;
+        duration = distance / 10; // ~36 km/h
       }
-
-      final firstRoute = routes.first as Map<String, dynamic>;
-      final distance = (firstRoute['distance'] as num).toDouble();
-      final duration = (firstRoute['duration'] as num).toDouble();
-      final geometry = firstRoute['geometry'] as Map<String, dynamic>;
-      final rawCoords = geometry['coordinates'] as List<dynamic>;
-
-      final coords = rawCoords.map((c) {
-        final pair = c as List<dynamic>;
-        return GeoPoint(
-          (pair[0] as num).toDouble(),
-          (pair[1] as num).toDouble(),
-        );
-      }).toList();
 
       final cityResult = CityRouteResult(
         distance: distance,
@@ -1125,15 +1147,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         _cityRoute = cityResult;
         _currentRoute = fairgroundRoute;
         _gpsMessage =
-            'Route ready to ${destination.label}. Drive to Gate 1 then walk ${fairgroundRoute.distance.round()} m.';
+            'Directions connected to ${destination.label} from your location.';
         _activePanel = null;
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && identical(_currentRoute, fairgroundRoute)) {
-          _fitRouteToScreen(data, fairgroundRoute);
+          _fitRouteToScreen(data, fairgroundRoute!);
         }
       });
+
     } catch (e) {
       setState(() {
         _gpsMessage = null;

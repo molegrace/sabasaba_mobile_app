@@ -1,11 +1,15 @@
-﻿part of '../../main.dart';
+part of '../../main.dart';
 
 class GeoPoint {
   const GeoPoint(this.lng, this.lat);
 
   final double lng;
   final double lat;
+
+  double get latitude => lat;
+  double get longitude => lng;
 }
+
 
 class GeoBounds {
   const GeoBounds({
