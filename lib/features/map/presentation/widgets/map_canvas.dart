@@ -342,7 +342,17 @@ class ExhibitionMapPainter extends CustomPainter {
       if (routePoints.isEmpty) {
         routePoints.add(projection.project(startPoint!));
         routePoints.add(projection.project(endPoint!));
+      } else {
+        final firstPt = projection.project(startPoint!);
+        if ((routePoints.first - firstPt).distance > 2.0) {
+          routePoints.insert(0, firstPt);
+        }
+        final lastPt = projection.project(endPoint!);
+        if ((routePoints.last - lastPt).distance > 2.0) {
+          routePoints.add(lastPt);
+        }
       }
+
 
       if (routePoints.isNotEmpty) {
         final routeHaloPaint = Paint()

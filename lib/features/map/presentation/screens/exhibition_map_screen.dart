@@ -490,22 +490,18 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     route: _currentRoute,
                     cityRoute: _cityRoute,
                     startPoint:
-
-                        (_currentRoute != null && _startLocationId.isNotEmpty)
-                        ? _findLocation(
-                            data.locations,
-                            _startLocationId,
-                          )?.position
-                        : null,
+                        ((_currentRoute != null || _cityRoute != null) &&
+                                _startLocationId.isNotEmpty)
+                            ? _resolvePoint(_startLocationId, data)
+                            : null,
                     endPoint:
-                        (_currentRoute != null && _endLocationId.isNotEmpty)
-                        ? _findLocation(
-                            data.locations,
-                            _endLocationId,
-                          )?.position
-                        : null,
+                        ((_currentRoute != null || _cityRoute != null) &&
+                                _endLocationId.isNotEmpty)
+                            ? _resolvePoint(_endLocationId, data)
+                            : null,
                     userLocation: _userLocation,
                     userLocationAccuracy: _userLocationAccuracy,
+
                   ),
                 ),
               ),
@@ -845,7 +841,18 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   void _onCanvasTap(MapFeature area, ExhibitionMapData data) {
     final loc = area.featureId != null
         ? _findLocation(data.locations, area.featureId!)
-        : null;
+        : _findLocation(data.locations, area.key, data);
+
+    final targetLoc = loc ?? RoutingLocation(
+      id: area.featureId ?? area.key,
+      label: area.title,
+      description: area.layer.label,
+      layerName: area.layer.label,
+      position: area.center,
+      nodeId: nearestNode(area.center, data.nodes).id,
+      companyName: area.rawProperties['company_name'] as String?,
+      properties: area.rawProperties,
+    );
 
     setState(() {
       _selectedAreaForCanvas = area;
@@ -855,17 +862,20 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         layerName: area.layer.label,
         companyName: area.rawProperties['company_name'] as String?,
         properties: area.rawProperties,
-        location: loc,
+        location: targetLoc,
       );
-      _activePanel = 'details';
+      _startLocationId = gpsStartId;
+      _endLocationId = targetLoc.id;
     });
+
+    _calculateRoute(data);
   }
 
   // ─── Select a location from the spaces list ───────────────────────────────
   void _selectLocation(RoutingLocation loc, ExhibitionMapData data) {
     // Find the corresponding canvas feature for highlighting
     final mapFeature = data.buildings
-        .where((b) => b.featureId == loc.id)
+        .where((b) => b.featureId == loc.id || b.key == loc.id)
         .firstOrNull;
     if (mapFeature != null) {
       setState(() => _selectedAreaForCanvas = mapFeature);
@@ -883,9 +893,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         properties: loc.properties,
         location: loc,
       );
-      _activePanel = 'details';
+      _startLocationId = gpsStartId;
+      _endLocationId = loc.id;
     });
+
+    _calculateRoute(data);
   }
+
 
   // ─── Focus map on a location ──────────────────────────────────────────────
   void _focusLocation(RoutingLocation loc, ExhibitionMapData data) {
@@ -1350,12 +1364,23 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         .firstOrNull;
     setState(() {
       _selectedAreaForCanvas = building;
-      _activePanel = 'spaces';
+      _selectedFeatureInfo = SelectedFeatureInfo(
+        id: loc.id,
+        label: loc.label,
+        layerName: loc.layerName,
+        companyName: loc.companyName,
+        properties: loc.properties,
+        location: loc,
+      );
+      _startLocationId = gpsStartId;
+      _endLocationId = loc.id;
     });
     if (building != null) {
       _fitMapToArea(building, data);
     }
+    _calculateRoute(data);
   }
+
 
   void _fitMapToArea(MapFeature building, ExhibitionMapData data) {
 
@@ -1437,6 +1462,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     }
     return null;
   }
+
+  GeoPoint? _resolvePoint(String id, ExhibitionMapData data) {
+    if (id.isEmpty) return null;
+    if (id == gpsStartId) {
+      return _userLocation ?? const GeoPoint(39.27701, -6.86392);
+    }
+    final loc = _findLocation(data.locations, id, data);
+    return loc?.position;
+  }
+
 
 
   void _zoom(double factor, {Offset? focalPoint}) {
