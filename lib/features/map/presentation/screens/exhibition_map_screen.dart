@@ -112,12 +112,36 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     if (mounted) setState(() => _savedIds = ids);
   }
 
+  StreamSubscription<Position>? _positionSubscription;
+
+  void _startLiveLocationStream() {
+    _positionSubscription?.cancel();
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 2,
+      ),
+    ).listen(
+      (position) {
+        if (!mounted) return;
+        setState(() {
+          _locationAllowed = true;
+          _userLocation = GeoPoint(position.longitude, position.latitude);
+          _userLocationAccuracy = position.accuracy;
+        });
+      },
+      onError: (_) {},
+    );
+  }
+
   @override
   void dispose() {
     if (_isMapFullscreen) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
+    _positionSubscription?.cancel();
     _connectivitySubscription?.cancel();
+
     _connectionBannerTimer?.cancel();
     _authNameController.dispose();
     _authEmailController.dispose();
@@ -480,7 +504,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
                     onSelectArea: (area) => _onCanvasTap(area, data),
                     route: _currentRoute,
+                    cityRoute: _cityRoute,
                     startPoint:
+
                         (_currentRoute != null && _startLocationId.isNotEmpty)
                         ? _findLocation(
                             data.locations,
@@ -775,22 +801,26 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           onShare: () => _shareFeature(info),
           onToggleSave: locId != null ? () => _toggleSaveLocation(locId) : null,
           onSetDestination: () {
-            if (info.location != null) {
+            final loc = info.location ?? _findLocation(data.locations, info.id, data);
+            if (loc != null) {
               setState(() {
                 _startLocationId = gpsStartId;
-                _endLocationId = info.location!.id;
+                _endLocationId = loc.id;
                 _activePanel = 'route';
               });
+              _calculateRoute(data);
             }
           },
           onSetStart: () {
-            if (info.location != null) {
+            final loc = info.location ?? _findLocation(data.locations, info.id, data);
+            if (loc != null) {
               setState(() {
-                _startLocationId = info.location!.id;
+                _startLocationId = loc.id;
                 _activePanel = 'route';
               });
             }
           },
+
         );
 
       case 'help':
@@ -1288,13 +1318,37 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
-  RoutingLocation? _findLocation(List<RoutingLocation> locations, String id) {
+  RoutingLocation? _findLocation(
+    List<RoutingLocation> locations,
+    String id, [
+    ExhibitionMapData? data,
+  ]) {
     if (id.isEmpty) return null;
     for (final l in locations) {
       if (l.id == id) return l;
     }
+    if (data != null) {
+      final building = data.buildings
+          .where((b) => b.featureId == id || b.key == id)
+          .firstOrNull;
+      if (building != null) {
+        final node = nearestNode(building.center, data.nodes);
+        return RoutingLocation(
+          id: building.featureId ?? building.key,
+          label: building.title,
+          description: building.layer.label,
+          layerName: building.layer.label,
+          position: building.center,
+          nodeId: node.id,
+          companyName: building.rawProperties['company_name'] as String?,
+          properties: building.rawProperties,
+        );
+
+      }
+    }
     return null;
   }
+
 
   void _zoom(double factor, {Offset? focalPoint}) {
     final current = _transformController.value;
@@ -1353,7 +1407,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         _userLocation = point;
         _userLocationAccuracy = position.accuracy;
       });
+      _startLiveLocationStream();
       _focusGeoPoint(point, data, targetScale: 6);
+
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

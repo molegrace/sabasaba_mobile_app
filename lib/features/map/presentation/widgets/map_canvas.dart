@@ -17,6 +17,7 @@ class MapCanvas extends StatelessWidget {
     required this.onSelectArea,
     this.categoryFilter = 'all',
     this.route,
+    this.cityRoute,
     this.startPoint,
     this.endPoint,
     this.userLocation,
@@ -37,13 +38,16 @@ class MapCanvas extends StatelessWidget {
   final ValueChanged<MapFeature> onSelectArea;
   final String categoryFilter;
   final RouteResult? route;
+  final CityRouteResult? cityRoute;
   final GeoPoint? startPoint;
   final GeoPoint? endPoint;
   final GeoPoint? userLocation;
   final double? userLocationAccuracy;
 
+
   @override
   Widget build(BuildContext context) {
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -104,6 +108,7 @@ class MapCanvas extends StatelessWidget {
                               categoryFilter: categoryFilter,
                               scale: controller.value.getMaxScaleOnAxis(),
                               route: route,
+                              cityRoute: cityRoute,
                               startPoint: startPoint,
                               endPoint: endPoint,
                               userLocation: userLocation,
@@ -145,6 +150,7 @@ class ExhibitionMapPainter extends CustomPainter {
     this.categoryFilter = 'all',
     this.scale = 1.0,
     this.route,
+    this.cityRoute,
     this.startPoint,
     this.endPoint,
     this.userLocation,
@@ -158,6 +164,8 @@ class ExhibitionMapPainter extends CustomPainter {
   final String categoryFilter;
   final double scale;
   final RouteResult? route;
+  final CityRouteResult? cityRoute;
+
   final GeoPoint? startPoint;
   final GeoPoint? endPoint;
   final GeoPoint? userLocation;
@@ -295,7 +303,24 @@ class ExhibitionMapPainter extends CustomPainter {
       }
     }
 
+    // Paint city driving route polyline if present
+
+    final activeCityRoute = cityRoute;
+    if (activeCityRoute != null && activeCityRoute.coordinates.isNotEmpty) {
+      final cityPoints = activeCityRoute.coordinates
+          .map((gp) => projection.project(gp))
+          .toList();
+      final cityPaint = Paint()
+        ..color = const Color(0xff6366f1) // indigo-500 driving route
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5 / currentScale
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      _drawDashedPolyline(canvas, cityPoints, cityPaint);
+    }
+
     final activeRoute = route;
+
 
     if (activeRoute != null && startPoint != null && endPoint != null) {
       final routePoints = <Offset>[];
