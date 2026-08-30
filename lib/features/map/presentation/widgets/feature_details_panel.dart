@@ -241,13 +241,15 @@ class _FeatureDetailsPanelState extends State<FeatureDetailsPanel> {
                           border: Border.all(color: const Color(0xffa7f3d0)),
                         ),
                         child: Text(
-                          companyName != null ? 'Assigned Exhibitor' : 'Spatial Feature',
+                          companyName != null ? 'Company' : 'Spatial Feature',
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: Color(0xff047857),
                           ),
                         ),
+
+
                       ),
                       if (industries.isNotEmpty) ...[
                         const SizedBox(width: 8),

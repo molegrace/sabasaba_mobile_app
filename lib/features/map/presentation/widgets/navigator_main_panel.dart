@@ -1,9 +1,9 @@
 part of '../../../../main.dart';
 
 /// Responsive sliding main panel that overlays the map — matches web navigator's MainPanel.
-/// On mobile (width < 600) it occupies full width.
-/// On desktop/tablet (width >= 600) it occupies a fixed width of 400px on the left,
-/// leaving the rest of the map visible and interactive.
+/// On mobile (width < 600) it occupies ~82% width (max 340px) so the visitor
+/// can clearly see the map canvas, selected features, pins, and controls on the right.
+/// On desktop/tablet (width >= 600) it occupies a fixed width of 400px on the left.
 class NavigatorMainPanel extends StatelessWidget {
   const NavigatorMainPanel({
     super.key,
@@ -23,7 +23,9 @@ class NavigatorMainPanel extends StatelessWidget {
     final statusBarHeight = media.padding.top;
     final topClearance = statusBarHeight + 68.0;
 
-    final panelWidth = isDesktop ? 400.0 : media.size.width;
+    final panelWidth = isDesktop
+        ? 400.0
+        : math.min(media.size.width * 0.82, 340.0);
 
     return Positioned(
       left: 0,
@@ -33,12 +35,18 @@ class NavigatorMainPanel extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.96),
+          borderRadius: isDesktop
+              ? null
+              : const BorderRadius.only(
+                  topRight: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                ),
           border: isDesktop
               ? Border(right: BorderSide(color: Colors.grey.shade200))
-              : null,
+              : Border.all(color: Colors.grey.shade300, width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
+              color: Colors.black.withValues(alpha: 0.16),
               blurRadius: 20,
               offset: const Offset(4, 0),
             ),
@@ -52,7 +60,7 @@ class NavigatorMainPanel extends StatelessWidget {
 
             // Title bar
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+              padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(color: Colors.grey.shade200),

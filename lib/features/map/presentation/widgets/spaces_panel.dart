@@ -89,6 +89,7 @@ class SpacesPanel extends StatefulWidget {
     required this.onCategoryChanged,
     required this.onSelectLocation,
     required this.onSetTarget,
+    this.onResetFilters,
   });
 
   final List<RoutingLocation> locations;
@@ -98,10 +99,12 @@ class SpacesPanel extends StatefulWidget {
   final ValueChanged<String> onCategoryChanged;
   final ValueChanged<RoutingLocation> onSelectLocation;
   final ValueChanged<RoutingLocation> onSetTarget;
+  final VoidCallback? onResetFilters;
 
   @override
   State<SpacesPanel> createState() => _SpacesPanelState();
 }
+
 
 class _SpacesPanelState extends State<SpacesPanel> {
   final _scrollController = ScrollController();
@@ -228,18 +231,70 @@ class _SpacesPanelState extends State<SpacesPanel> {
 
         // Location cards
         if (widget.filteredLocations.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(
-              child: Text(
-                'No locations match the selected filter.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xff94a3b8),
-                  fontStyle: FontStyle.italic,
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xfff8fafc),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xffe2e8f0)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                    color: Color(0xfff1f5f9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.search_off_rounded,
+                    size: 24,
+                    color: Color(0xff94a3b8),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                const Text(
+                  'No matching item found',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xff334155),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'No locations match your current search query or category filter.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xff64748b),
+                  ),
+                ),
+                if (widget.onResetFilters != null) ...[
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: widget.onResetFilters,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Reset Filters & Clear Search'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xff0284c7),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           )
         else
@@ -251,6 +306,7 @@ class _SpacesPanelState extends State<SpacesPanel> {
             ),
             const SizedBox(height: 8),
           ],
+
       ],
     );
   }

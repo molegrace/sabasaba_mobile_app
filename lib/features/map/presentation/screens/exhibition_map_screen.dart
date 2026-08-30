@@ -183,18 +183,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   selectedIcon: Icon(Icons.map),
                   label: 'Navigator',
                 ),
-                NavigationDestination(
-                  icon: Icon(Icons.badge_outlined),
-                  selectedIcon: Icon(Icons.badge),
-                  label: 'Exhibitor',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.event_outlined),
-                  selectedIcon: Icon(Icons.event),
-                  label: 'Tickets',
-                ),
               ],
             ),
+
       body: Column(
         children: [
           AnimatedSwitcher(
@@ -247,73 +238,11 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     exhibition: data.exhibition,
                   );
                 }
-                if (_selectedNavIndex == 3) {
-                  return ExhibitorTab(
-                    account: _exhibitorAccount,
-                    registerMode: _exhibitorRegisterMode,
-                    nameController: _exhibitorNameController,
-                    emailController: _exhibitorEmailController,
-                    boothNameController: _boothNameController,
-                    productController: _productController,
-                    replyController: _replyController,
-                    boothName: _boothName,
-                    products: _exhibitorProducts,
-                    inquiries: _visitorInquiries,
-                    onToggleMode: () => setState(
-                      () => _exhibitorRegisterMode = !_exhibitorRegisterMode,
-                    ),
-                    onSubmit: () {
-                      final email = _exhibitorEmailController.text.trim();
-                      final fallbackName = email.isEmpty
-                          ? 'Exhibitor'
-                          : email.split('@').first;
-                      setState(() {
-                        _exhibitorAccount = UserAccount(
-                          name:
-                              _exhibitorRegisterMode &&
-                                  _exhibitorNameController.text
-                                      .trim()
-                                      .isNotEmpty
-                              ? _exhibitorNameController.text.trim()
-                              : fallbackName,
-                          email: email.isEmpty
-                              ? 'exhibitor@sabasaba.local'
-                              : email,
-                        );
-                      });
-                    },
-                    onSaveBooth: () {
-                      final value = _boothNameController.text.trim();
-                      if (value.isEmpty) return;
-                      setState(() => _boothName = value);
-                    },
-                    onAddProduct: () {
-                      final value = _productController.text.trim();
-                      if (value.isEmpty) return;
-                      setState(() {
-                        _exhibitorProducts.add(value);
-                        _productController.clear();
-                      });
-                    },
-                    onReply: (index) {
-                      final reply = _replyController.text.trim();
-                      if (reply.isEmpty) return;
-                      setState(() {
-                        _visitorInquiries[index] = _visitorInquiries[index]
-                            .copyWith(response: reply);
-                        _replyController.clear();
-                      });
-                    },
-                    onLogout: () => setState(() => _exhibitorAccount = null),
-                  );
-                }
-                if (_selectedNavIndex == 4) {
-                  return const TicketsTab();
-                }
 
                 // ── Navigator Map View (index 2) ─────────────────────────────
                 return _buildMapView(data);
               },
+
             ),
           ),
         ],
@@ -449,12 +378,67 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           loc.industry == _categoryFilter;
     }).toList();
 
+    final searchSuggestions = <SearchSuggestionItem>[];
+    final sq = _searchQuery.trim().toLowerCase();
+    if (sq.isNotEmpty) {
+      for (final loc in data.locations) {
+        final matchesLabel = loc.label.toLowerCase().contains(sq);
+        final matchesComp = loc.companyName?.toLowerCase().contains(sq) ?? false;
+        final matchesDesc = loc.description.toLowerCase().contains(sq);
+        final matchesInd = loc.industry?.toLowerCase().contains(sq) ?? false;
+
+        if (matchesLabel || matchesComp || matchesDesc || matchesInd) {
+          final isExhibitor =
+              loc.companyName != null && loc.companyName!.trim().isNotEmpty;
+          searchSuggestions.add(
+            SearchSuggestionItem(
+              id: loc.id,
+              title: isExhibitor ? loc.companyName! : loc.label,
+              subtitle: isExhibitor
+                  ? '${loc.label} • ${loc.description}'
+                  : loc.description,
+              type: isExhibitor
+                  ? 'exhibitor'
+                  : (loc.layerName.contains('Hall') ? 'hall' : 'booth'),
+              badge: isExhibitor ? 'Company' : loc.layerName,
+
+              onSelect: () => _selectLocationFromSearch(loc, data),
+            ),
+          );
+        }
+
+        if (loc.offerings != null) {
+          for (final offering in loc.offerings!) {
+            final oTitle = offering.title ?? '';
+            final oDesc = offering.description ?? '';
+            if (oTitle.toLowerCase().contains(sq) ||
+                oDesc.toLowerCase().contains(sq)) {
+              searchSuggestions.add(
+                SearchSuggestionItem(
+                  id: '${loc.id}_${offering.id ?? oTitle}',
+                  title: oTitle.isNotEmpty ? oTitle : loc.label,
+                  subtitle:
+                      '${loc.companyName ?? loc.label} • ${offering.priceText ?? offering.type ?? 'Offering'}',
+                  type: offering.type == 'service' ? 'service' : 'product',
+                  badge: offering.type ?? 'Product',
+                  onSelect: () => _selectLocationFromSearch(loc, data),
+                ),
+              );
+            }
+          }
+        }
+
+        if (searchSuggestions.length >= 10) break;
+      }
+    }
+
     // Start/end labels for info bar
     final startLoc = _findLocation(data.locations, _startLocationId);
     final endLoc = _findLocation(data.locations, _endLocationId);
 
     return SafeArea(
       bottom: false,
+
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isDesktop = constraints.maxWidth >= 600;
@@ -560,27 +544,27 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   ),
                 ),
 
-              // ── 3. Right toolbar (always on desktop, hidden on mobile when panel open)
-              if (isDesktop || _activePanel == null)
-                Positioned(
-                  right: 14,
-                  top: 14,
-                  child: NavigatorRightToolbar(
-                    tileStyle: _tileStyle,
-                    onTileStyleChanged: (s) => setState(() => _tileStyle = s),
-                    showLegend: _showLegend,
-                    onToggleLegend: () =>
-                        setState(() => _showLegend = !_showLegend),
-                    onLocateMe: () => _locateMe(data),
-                    onResetView: () => _resetMapView(data),
-                    onDirections: () => setState(() {
-                      _startLocationId = gpsStartId;
-                      _activePanel = 'route';
-                    }),
-                    isFullscreen: _isMapFullscreen,
-                    onToggleFullscreen: _toggleMapFullscreen,
-                  ),
+              // ── 3. Right toolbar (always visible for map navigation controls)
+              Positioned(
+                right: 14,
+                top: 14,
+                child: NavigatorRightToolbar(
+                  tileStyle: _tileStyle,
+                  onTileStyleChanged: (s) => setState(() => _tileStyle = s),
+                  showLegend: _showLegend,
+                  onToggleLegend: () =>
+                      setState(() => _showLegend = !_showLegend),
+                  onLocateMe: () => _locateMe(data),
+                  onResetView: () => _resetMapView(data),
+                  onDirections: () => setState(() {
+                    _startLocationId = gpsStartId;
+                    _activePanel = 'route';
+                  }),
+                  isFullscreen: _isMapFullscreen,
+                  onToggleFullscreen: _toggleMapFullscreen,
                 ),
+              ),
+
 
               // ── 4. Bottom route info bar ─────────────────────────────────────
               if (_cityRoute != null)
@@ -651,11 +635,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
               Positioned(
                 top: 14,
                 left: 14,
-                width: isDesktop
-                    ? 372
-                    : (constraints.maxWidth -
-                          (_activePanel == null ? 68.0 : 28.0)),
+                width: isDesktop ? 372 : (constraints.maxWidth - 68.0),
                 child: NavigatorSearchBox(
+
                   controller: _searchController,
                   isLeftOpen: _isLeftOpen,
                   onToggleSidebar: () =>
@@ -663,17 +645,31 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   onSearchChange: (value) {
                     setState(() {
                       _searchQuery = value;
+                      if (value.trim().isNotEmpty && _activePanel != 'spaces') {
+                        _activePanel = 'spaces';
+                      }
+                    });
+                  },
+                  onClear: () {
+                    setState(() {
+                      _searchQuery = '';
+                      _searchController.clear();
+                    });
+                  },
+                  onFocus: () {},
+
+                  suggestions: searchSuggestions,
+                  onSelectPopularTag: (tagQuery) {
+                    setState(() {
+                      _searchQuery = tagQuery;
+                      _searchController.text = tagQuery;
                       if (_activePanel != 'spaces') {
                         _activePanel = 'spaces';
                       }
                     });
                   },
-                  onFocus: () {
-                    if (_activePanel == null) {
-                      setState(() => _activePanel = 'spaces');
-                    }
-                  },
                 ),
+
               ),
             ],
           );
@@ -733,7 +729,15 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
               _activePanel = 'route';
             });
           },
+          onResetFilters: () {
+            setState(() {
+              _categoryFilter = 'all';
+              _searchQuery = '';
+              _searchController.clear();
+            });
+          },
         );
+
 
       case 'saved':
         return SavedPanel(
@@ -1340,7 +1344,69 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     _mapAnimationController.forward(from: 0);
   }
 
+  void _selectLocationFromSearch(RoutingLocation loc, ExhibitionMapData data) {
+    final building = data.buildings
+        .where((b) => b.featureId == loc.id || b.key == loc.id)
+        .firstOrNull;
+    setState(() {
+      _selectedAreaForCanvas = building;
+      _activePanel = 'spaces';
+    });
+    if (building != null) {
+      _fitMapToArea(building, data);
+    }
+  }
+
+  void _fitMapToArea(MapFeature building, ExhibitionMapData data) {
+
+    final renderBox =
+        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+
+    final size = renderBox.size;
+    final projection = data.projectionFor(size);
+    final points =
+        building.allPoints.map((p) => projection.project(p)).toList();
+    if (points.isEmpty) return;
+
+    final left = points.map((p) => p.dx).reduce(math.min);
+    final right = points.map((p) => p.dx).reduce(math.max);
+    final top = points.map((p) => p.dy).reduce(math.min);
+    final bottom = points.map((p) => p.dy).reduce(math.max);
+    const padding = 80.0;
+    final areaWidth = math.max(1.0, right - left);
+    final areaHeight = math.max(1.0, bottom - top);
+    final scale = math
+        .min(
+          (size.width - padding * 2) / areaWidth,
+          (size.height - padding * 2) / areaHeight,
+        )
+        .clamp(minMapScale, maxMapScale);
+    final center = Offset((left + right) / 2, (top + bottom) / 2);
+    final target = Matrix4.identity()
+      ..translate(
+        size.width / 2 - center.dx * scale,
+        size.height / 2 - center.dy * scale,
+      )
+      ..scale(scale);
+
+    _mapAnimationController.stop();
+    _mapAnimation =
+        Matrix4Tween(
+          begin: _transformController.value.clone(),
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _mapAnimationController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
+    _mapAnimationController.forward(from: 0);
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────
+
+
   RoutingLocation? _findLocation(
     List<RoutingLocation> locations,
     String id, [

@@ -11,7 +11,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:sabasaba_mobile_app/features/tickets/presentation/tickets_tab.dart';
 
 part 'features/map/presentation/screens/exhibition_map_screen.dart';
 part 'features/map/presentation/widgets/map_canvas.dart';
@@ -49,6 +48,13 @@ part 'core/models/geo_point.dart';
 part 'core/constants/map_config.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
   runApp(const SabaSabaApp());
 }
 
@@ -68,7 +74,6 @@ class SabaSabaApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
           seedColor: seed,
-          brightness: Brightness.light,
           primary: const Color(0xff0284c7),
         ),
         scaffoldBackgroundColor: const Color(0xfff3f6f1),

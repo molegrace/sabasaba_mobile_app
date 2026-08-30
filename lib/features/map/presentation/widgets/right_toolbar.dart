@@ -30,8 +30,6 @@ class NavigatorRightToolbar extends StatefulWidget {
 }
 
 class _NavigatorRightToolbarState extends State<NavigatorRightToolbar> {
-  bool _layersOpen = false;
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -47,48 +45,86 @@ class _NavigatorRightToolbarState extends State<NavigatorRightToolbar> {
         ),
         const SizedBox(height: 8),
 
-        // Layer picker
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            _ToolbarButton(
-              icon: Icons.layers_rounded,
-              tooltip: 'Map Layers',
-              isActive: _layersOpen,
-              onTap: () => setState(() => _layersOpen = !_layersOpen),
+        // Layer picker (using PopupMenuButton so hit testing works 100% on touch screens)
+        Theme(
+          data: Theme.of(context).copyWith(
+            hoverColor: const Color(0xfff0f9ff),
+            highlightColor: const Color(0xffe0f2fe),
+          ),
+          child: PopupMenuButton<MapTileStyle>(
+            tooltip: 'Map Layers / Appearance',
+            offset: const Offset(-180, 0),
+            elevation: 8,
+            shadowColor: Colors.black.withValues(alpha: 0.2),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: const BorderSide(color: Color(0xffe2e8f0)),
             ),
-            if (_layersOpen)
-              Positioned(
-                right: 50,
-                top: 0,
-                child: Material(
-                  elevation: 8,
-                  color: Colors.white.withOpacity(0.94),
-                  borderRadius: BorderRadius.circular(12),
-                  shadowColor: Colors.black26,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 6,
-                      horizontal: 4,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final style in MapTileStyle.values)
-                          _LayerPickerItem(
-                            style: style,
-                            isActive: widget.tileStyle == style,
-                            onTap: () {
-                              widget.onTileStyleChanged(style);
-                              setState(() => _layersOpen = false);
-                            },
-                          ),
+            color: Colors.white,
+            onSelected: (style) {
+              widget.onTileStyleChanged(style);
+            },
+            itemBuilder: (context) {
+              return MapTileStyle.values.map((style) {
+                final isActive = widget.tileStyle == style;
+                return PopupMenuItem<MapTileStyle>(
+                  value: style,
+                  height: 44,
+                  child: Row(
+                    children: [
+                      Icon(
+                        style.icon,
+                        size: 18,
+                        color: isActive
+                            ? const Color(0xff0284c7)
+                            : const Color(0xff64748b),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        style.label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight:
+                              isActive ? FontWeight.bold : FontWeight.w500,
+                          color: isActive
+                              ? const Color(0xff0284c7)
+                              : const Color(0xff334155),
+                        ),
+                      ),
+                      if (isActive) ...[
+                        const Spacer(),
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          size: 16,
+                          color: Color(0xff0284c7),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
-                ),
+                );
+              }).toList();
+            },
+            child: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-          ],
+              child: const Icon(
+                Icons.layers_rounded,
+                size: 20,
+                color: Color(0xff1e293b),
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 8),
 
@@ -167,7 +203,7 @@ class _ToolbarButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -181,54 +217,5 @@ class _ToolbarButton extends StatelessWidget {
       return Tooltip(message: tooltip!, child: button);
     }
     return button;
-  }
-}
-
-class _LayerPickerItem extends StatelessWidget {
-  const _LayerPickerItem({
-    required this.style,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  final MapTileStyle style;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? const Color(0xffe0f2fe) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              style.icon,
-              size: 16,
-              color: isActive
-                  ? const Color(0xff0284c7)
-                  : const Color(0xff64748b),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              style.label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                color: isActive
-                    ? const Color(0xff0369a1)
-                    : const Color(0xff334155),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
