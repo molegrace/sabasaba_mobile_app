@@ -12,6 +12,7 @@ class RouteInfoBar extends StatelessWidget {
     this.endLabel,
     required this.onEdit,
     required this.onClear,
+    this.clearLabel = 'Clear',
   });
 
   final double distanceMeters;
@@ -21,6 +22,7 @@ class RouteInfoBar extends StatelessWidget {
   final String? endLabel;
   final VoidCallback onEdit;
   final VoidCallback onClear;
+  final String clearLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -90,9 +92,9 @@ class RouteInfoBar extends StatelessWidget {
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text(
-                  'Clear',
-                  style: TextStyle(
+                child: Text(
+                  clearLabel,
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: Color(0xff94a3b8),
@@ -145,6 +147,94 @@ class RouteInfoBar extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class NavigationWarningBanner extends StatelessWidget {
+  const NavigationWarningBanner({
+    super.key,
+    required this.status,
+    required this.message,
+    this.onRecalculate,
+  });
+
+  final NavigationStatus status;
+  final String message;
+  final VoidCallback? onRecalculate;
+
+  @override
+  Widget build(BuildContext context) {
+    final arrived = status == NavigationStatus.arrived;
+    final offRoute = status == NavigationStatus.offRoute;
+    final color = arrived
+        ? const Color(0xff047857)
+        : offRoute
+        ? const Color(0xffbe123c)
+        : const Color(0xffb45309);
+    final background = arrived
+        ? const Color(0xffecfdf5)
+        : offRoute
+        ? const Color(0xfffff1f2)
+        : const Color(0xfffffbeb);
+    final icon = arrived
+        ? Icons.check_circle_rounded
+        : offRoute
+        ? Icons.warning_rounded
+        : Icons.wrong_location_rounded;
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x22000000),
+              blurRadius: 14,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    message,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (onRecalculate != null) ...[
+                    const SizedBox(height: 6),
+                    TextButton.icon(
+                      onPressed: onRecalculate,
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: const Text('Recalculate route'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: color,
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -39,6 +39,7 @@ part 'core/widgets/compass_control.dart';
 part 'core/widgets/common_status_widgets.dart';
 part 'core/widgets/connection_banner.dart';
 part 'features/map/data/routing_engine.dart';
+part 'features/map/data/navigation_progress.dart';
 part 'features/map/data/exhibition_map_data.dart';
 part 'features/profile/models/user_account.dart';
 part 'features/exhibitor/models/visitor_inquiry.dart';

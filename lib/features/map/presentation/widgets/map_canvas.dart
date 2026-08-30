@@ -22,6 +22,9 @@ class MapCanvas extends StatelessWidget {
     this.endPoint,
     this.userLocation,
     this.userLocationAccuracy,
+    this.remainingRoadRoute,
+    this.remainingFairgroundRoute,
+    this.navigationStatus,
   });
 
   final ExhibitionMapData data;
@@ -43,6 +46,9 @@ class MapCanvas extends StatelessWidget {
   final GeoPoint? endPoint;
   final GeoPoint? userLocation;
   final double? userLocationAccuracy;
+  final List<GeoPoint>? remainingRoadRoute;
+  final List<GeoPoint>? remainingFairgroundRoute;
+  final NavigationStatus? navigationStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -115,6 +121,10 @@ class MapCanvas extends StatelessWidget {
                               endPoint: endPoint,
                               userLocation: userLocation,
                               userLocationAccuracy: userLocationAccuracy,
+                              remainingRoadRoute: remainingRoadRoute,
+                              remainingFairgroundRoute:
+                                  remainingFairgroundRoute,
+                              navigationStatus: navigationStatus,
                             ),
                           );
                         },
@@ -157,6 +167,9 @@ class ExhibitionMapPainter extends CustomPainter {
     this.endPoint,
     this.userLocation,
     this.userLocationAccuracy,
+    this.remainingRoadRoute,
+    this.remainingFairgroundRoute,
+    this.navigationStatus,
   });
 
   final ExhibitionMapData data;
@@ -172,6 +185,9 @@ class ExhibitionMapPainter extends CustomPainter {
   final GeoPoint? endPoint;
   final GeoPoint? userLocation;
   final double? userLocationAccuracy;
+  final List<GeoPoint>? remainingRoadRoute;
+  final List<GeoPoint>? remainingFairgroundRoute;
+  final NavigationStatus? navigationStatus;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -334,13 +350,17 @@ class ExhibitionMapPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round;
 
       if (activeCityRoute != null) {
-        final roadRoutePoints = activeCityRoute.coordinates
-            .map(projection.project)
-            .toList();
+        final roadRoutePoints =
+            (remainingRoadRoute ?? activeCityRoute.coordinates)
+                .map(projection.project)
+                .toList();
+        final activeFairgroundPoints = remainingFairgroundRoute == null
+            ? fairgroundRoutePoints
+            : remainingFairgroundRoute!.map(projection.project).toList();
         _drawSolidPolyline(canvas, roadRoutePoints, routeHaloPaint);
         _drawSolidPolyline(canvas, roadRoutePoints, routePaint);
-        _drawSolidPolyline(canvas, fairgroundRoutePoints, routeHaloPaint);
-        _drawSolidPolyline(canvas, fairgroundRoutePoints, routePaint);
+        _drawSolidPolyline(canvas, activeFairgroundPoints, routeHaloPaint);
+        _drawSolidPolyline(canvas, activeFairgroundPoints, routePaint);
       } else {
         _drawDashedPolyline(canvas, fairgroundRoutePoints, routeHaloPaint);
         _drawDashedPolyline(canvas, fairgroundRoutePoints, routePaint);
@@ -426,7 +446,13 @@ class ExhibitionMapPainter extends CustomPainter {
       canvas.drawCircle(
         center,
         6 / currentScale,
-        Paint()..color = const Color(0xff0284c7),
+        Paint()
+          ..color = switch (navigationStatus) {
+            NavigationStatus.offRoute => const Color(0xffe11d48),
+            NavigationStatus.wrongDirection => const Color(0xfff59e0b),
+            NavigationStatus.arrived => const Color(0xff10b981),
+            _ => const Color(0xff0284c7),
+          },
       );
     }
   }
@@ -473,6 +499,9 @@ class ExhibitionMapPainter extends CustomPainter {
         scale != oldDelegate.scale ||
         route != oldDelegate.route ||
         cityRoute != oldDelegate.cityRoute ||
+        remainingRoadRoute != oldDelegate.remainingRoadRoute ||
+        remainingFairgroundRoute != oldDelegate.remainingFairgroundRoute ||
+        navigationStatus != oldDelegate.navigationStatus ||
         startPoint != oldDelegate.startPoint ||
         endPoint != oldDelegate.endPoint ||
         userLocation != oldDelegate.userLocation ||
