@@ -2,6 +2,7 @@ part of '../../../../main.dart';
 
 class MapCanvas extends StatelessWidget {
   const MapCanvas({
+    super.key,
     required this.data,
     required this.filteredAreas,
     required this.selectedArea,
@@ -32,7 +33,7 @@ class MapCanvas extends StatelessWidget {
   final TransformationController controller;
   final VoidCallback onRotationStart;
   final ValueChanged<double> onRotationUpdate;
-  final VoidCallback onDoubleTap;
+  final ValueChanged<Offset> onDoubleTap;
   final ValueChanged<MapFeature> onSelectArea;
   final String categoryFilter;
   final RouteResult? route;
@@ -51,7 +52,7 @@ class MapCanvas extends StatelessWidget {
           decoration: const BoxDecoration(color: Color(0xfff2efe9)),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onDoubleTap: onDoubleTap,
+            onDoubleTapDown: (details) => onDoubleTap(details.localPosition),
             onTapUp: (details) {
               final scenePoint = controller.toScene(details.localPosition);
               final hit = data.hitTest(
@@ -88,22 +89,28 @@ class MapCanvas extends StatelessWidget {
                         tileStyle: tileStyle,
                         refreshGeneration: tileRefreshGeneration,
                         controller: controller,
+                        rotation: rotation,
                       ),
 
-                      CustomPaint(
-                        painter: ExhibitionMapPainter(
-                          data: data,
-                          filteredAreas: filteredAreas,
-                          selectedArea: selectedArea,
-                          selectedService: selectedService,
-                          categoryFilter: categoryFilter,
-                          scale: controller.value.getMaxScaleOnAxis(),
-                          route: route,
-                          startPoint: startPoint,
-                          endPoint: endPoint,
-                          userLocation: userLocation,
-                          userLocationAccuracy: userLocationAccuracy,
-                        ),
+                      AnimatedBuilder(
+                        animation: controller,
+                        builder: (context, _) {
+                          return CustomPaint(
+                            painter: ExhibitionMapPainter(
+                              data: data,
+                              filteredAreas: filteredAreas,
+                              selectedArea: selectedArea,
+                              selectedService: selectedService,
+                              categoryFilter: categoryFilter,
+                              scale: controller.value.getMaxScaleOnAxis(),
+                              route: route,
+                              startPoint: startPoint,
+                              endPoint: endPoint,
+                              userLocation: userLocation,
+                              userLocationAccuracy: userLocationAccuracy,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -156,13 +163,11 @@ class ExhibitionMapPainter extends CustomPainter {
   final GeoPoint? userLocation;
   final double? userLocationAccuracy;
 
-
   @override
   void paint(Canvas canvas, Size size) {
     final projection = data.projectionFor(size);
 
     final currentScale = math.max(0.1, scale);
-
 
     final boundaryPaint = Paint()
       ..color = const Color(0xff0d9488)
@@ -232,13 +237,13 @@ class ExhibitionMapPainter extends CustomPainter {
     }
 
     for (final building in data.buildings) {
-      final isSelected = selectedArea != null &&
+      final isSelected =
+          selectedArea != null &&
           (selectedArea!.featureId != null
               ? selectedArea!.featureId == building.featureId
               : selectedArea!.key == building.key);
 
       final fillPaint = Paint()
-
         ..style = PaintingStyle.fill
         ..color = isSelected
             ? const Color(0x9914b8a6)
@@ -252,9 +257,7 @@ class ExhibitionMapPainter extends CustomPainter {
       final strokePaint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = (isSelected ? 2.0 : 0.6) / currentScale
-        ..color = isSelected
-            ? const Color(0xff0d9488)
-            : building.layerColor;
+        ..color = isSelected ? const Color(0xff0d9488) : building.layerColor;
 
       for (final polygon in building.polygons) {
         canvas.drawPath(_polygonPath(polygon, projection), strokePaint);
@@ -292,7 +295,6 @@ class ExhibitionMapPainter extends CustomPainter {
       }
     }
 
-
     final activeRoute = route;
 
     if (activeRoute != null && startPoint != null && endPoint != null) {
@@ -309,7 +311,8 @@ class ExhibitionMapPainter extends CustomPainter {
 
       if (routePoints.isNotEmpty) {
         final routePaint = Paint()
-          ..color = const Color(0xff0284c7) // sky-600 - matches web
+          ..color =
+              const Color(0xff0284c7) // sky-600 - matches web
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.8 / currentScale
           ..strokeCap = StrokeCap.round
@@ -319,7 +322,11 @@ class ExhibitionMapPainter extends CustomPainter {
 
         // Paint start as an emerald dot (fixed size when zooming)
         final startOffset = projection.project(startPoint!);
-        canvas.drawCircle(startOffset, 5 / currentScale, Paint()..color = Colors.white);
+        canvas.drawCircle(
+          startOffset,
+          5 / currentScale,
+          Paint()..color = Colors.white,
+        );
         canvas.drawCircle(
           startOffset,
           4 / currentScale,
@@ -378,8 +385,16 @@ class ExhibitionMapPainter extends CustomPainter {
             ..strokeWidth = 1 / currentScale,
         );
       }
-      canvas.drawCircle(center, 9 / currentScale, Paint()..color = Colors.white);
-      canvas.drawCircle(center, 6 / currentScale, Paint()..color = const Color(0xff0284c7));
+      canvas.drawCircle(
+        center,
+        9 / currentScale,
+        Paint()..color = Colors.white,
+      );
+      canvas.drawCircle(
+        center,
+        6 / currentScale,
+        Paint()..color = const Color(0xff0284c7),
+      );
     }
   }
 
@@ -467,7 +482,6 @@ class ExhibitionMapPainter extends CustomPainter {
   }
 
   void _drawRoundabouts(Canvas canvas, MapProjection projection) {
-
     final roadPaint = Paint()
       ..color = const Color(0xffc8c8c8)
       ..style = PaintingStyle.fill;
@@ -482,7 +496,6 @@ class ExhibitionMapPainter extends CustomPainter {
       canvas.drawCircle(center, 2.5, roadPaint);
     }
   }
-
 
   Path _polygonPath(List<GeoPoint> polygon, MapProjection projection) {
     final path = Path();

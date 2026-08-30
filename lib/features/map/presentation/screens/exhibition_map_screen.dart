@@ -85,15 +85,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   void initState() {
     super.initState();
     _loadSavedIds();
-    _mapAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..addListener(() {
-        final animation = _mapAnimation;
-        if (animation != null) {
-          _transformController.value = animation.value;
-        }
-      });
+    _mapAnimationController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1200),
+        )..addListener(() {
+          final animation = _mapAnimation;
+          if (animation != null) {
+            _transformController.value = animation.value;
+          }
+        });
     _mapFuture = widget.mapData ?? ExhibitionMapData.load();
     if (widget.mapData == null) {
       _monitorConnectivity();
@@ -110,7 +111,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     final ids = await SavedLocationsManager.toggleSave(id);
     if (mounted) setState(() => _savedIds = ids);
   }
-
 
   @override
   void dispose() {
@@ -136,39 +136,41 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      bottomNavigationBar: _isMapFullscreen ? null : NavigationBar(
-        selectedIndex: _selectedNavIndex,
-        onDestinationSelected: (index) {
-          setState(() => _selectedNavIndex = index);
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            selectedIcon: Icon(Icons.storefront),
-            label: 'Services',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.info_outline),
-            selectedIcon: Icon(Icons.info),
-            label: 'Info',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map),
-            label: 'Navigator',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.badge_outlined),
-            selectedIcon: Icon(Icons.badge),
-            label: 'Exhibitor',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.event_outlined),
-            selectedIcon: Icon(Icons.event),
-            label: 'Tickets',
-          ),
-        ],
-      ),
+      bottomNavigationBar: _isMapFullscreen
+          ? null
+          : NavigationBar(
+              selectedIndex: _selectedNavIndex,
+              onDestinationSelected: (index) {
+                setState(() => _selectedNavIndex = index);
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.storefront_outlined),
+                  selectedIcon: Icon(Icons.storefront),
+                  label: 'Services',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.info_outline),
+                  selectedIcon: Icon(Icons.info),
+                  label: 'Info',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.map_outlined),
+                  selectedIcon: Icon(Icons.map),
+                  label: 'Navigator',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.badge_outlined),
+                  selectedIcon: Icon(Icons.badge),
+                  label: 'Exhibitor',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.event_outlined),
+                  selectedIcon: Icon(Icons.event),
+                  label: 'Tickets',
+                ),
+              ],
+            ),
       body: Column(
         children: [
           AnimatedSwitcher(
@@ -238,12 +240,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     ),
                     onSubmit: () {
                       final email = _exhibitorEmailController.text.trim();
-                      final fallbackName =
-                          email.isEmpty ? 'Exhibitor' : email.split('@').first;
+                      final fallbackName = email.isEmpty
+                          ? 'Exhibitor'
+                          : email.split('@').first;
                       setState(() {
                         _exhibitorAccount = UserAccount(
-                          name: _exhibitorRegisterMode &&
-                                  _exhibitorNameController.text.trim().isNotEmpty
+                          name:
+                              _exhibitorRegisterMode &&
+                                  _exhibitorNameController.text
+                                      .trim()
+                                      .isNotEmpty
                               ? _exhibitorNameController.text.trim()
                               : fallbackName,
                           email: email.isEmpty
@@ -269,8 +275,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                       final reply = _replyController.text.trim();
                       if (reply.isEmpty) return;
                       setState(() {
-                        _visitorInquiries[index] =
-                            _visitorInquiries[index].copyWith(response: reply);
+                        _visitorInquiries[index] = _visitorInquiries[index]
+                            .copyWith(response: reply);
                         _replyController.clear();
                       });
                     },
@@ -300,7 +306,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     };
 
     for (final loc in data.locations) {
-      final isExhibitor = loc.companyName != null && loc.companyName!.trim().isNotEmpty;
+      final isExhibitor =
+          loc.companyName != null && loc.companyName!.trim().isNotEmpty;
       if (isExhibitor) {
         categoryCounts['exhibitors'] = (categoryCounts['exhibitors'] ?? 0) + 1;
       }
@@ -332,10 +339,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     ];
 
     // Industry categories (sorted alphabetically)
-    final indKeys = categoryCounts.keys
-        .where((key) => key.startsWith('ind:') && (categoryCounts[key] ?? 0) > 0)
-        .toList()
-      ..sort();
+    final indKeys =
+        categoryCounts.keys
+            .where(
+              (key) => key.startsWith('ind:') && (categoryCounts[key] ?? 0) > 0,
+            )
+            .toList()
+          ..sort();
 
     for (final key in indKeys) {
       final industryLabel = key.replaceFirst('ind:', '');
@@ -349,19 +359,19 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     }
 
     // Layer categories (sorted alphabetically)
-    final layerKeys = categoryCounts.keys
-        .where((key) => key.startsWith('layer:') && (categoryCounts[key] ?? 0) > 0)
-        .toList()
-      ..sort();
+    final layerKeys =
+        categoryCounts.keys
+            .where(
+              (key) =>
+                  key.startsWith('layer:') && (categoryCounts[key] ?? 0) > 0,
+            )
+            .toList()
+          ..sort();
 
     for (final key in layerKeys) {
       final layerLabel = key.replaceFirst('layer:', '');
       availableCategories.add(
-        _CategoryItem(
-          id: key,
-          label: layerLabel,
-          count: categoryCounts[key]!,
-        ),
+        _CategoryItem(id: key, label: layerLabel, count: categoryCounts[key]!),
       );
     }
 
@@ -378,7 +388,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
     final filteredLocations = data.locations.where((loc) {
       final q = _searchQuery.trim().toLowerCase();
-      final matchesSearch = q.isEmpty ||
+      final matchesSearch =
+          q.isEmpty ||
           loc.label.toLowerCase().contains(q) ||
           loc.description.toLowerCase().contains(q) ||
           (loc.companyName?.toLowerCase().contains(q) ?? false) ||
@@ -386,14 +397,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           (loc.industries?.any((item) => item.toLowerCase().contains(q)) ??
               false) ||
           (loc.offerings?.any(
-                (item) => [
-                  item.type,
-                  item.title,
-                  item.description,
-                  item.priceText,
-                ].whereType<String>().any(
-                      (value) => value.toLowerCase().contains(q),
-                    ),
+                (item) =>
+                    [item.type, item.title, item.description, item.priceText]
+                        .whereType<String>()
+                        .any((value) => value.toLowerCase().contains(q)),
               ) ??
               false) ||
           (loc.searchTerms?.any((t) => t.toLowerCase().contains(q)) ?? false);
@@ -406,27 +413,29 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       }
       if (_categoryFilter.startsWith('ind:')) {
         final targetInd = _categoryFilter.replaceFirst('ind:', '');
-        return (loc.industries != null && loc.industries!.contains(targetInd)) ||
+        return (loc.industries != null &&
+                loc.industries!.contains(targetInd)) ||
             loc.industry == targetInd;
       }
       if (_categoryFilter.startsWith('layer:')) {
         final targetLayer = _categoryFilter.replaceFirst('layer:', '');
         return loc.layerName == targetLayer;
       }
-      return loc.layerName == _categoryFilter || loc.industry == _categoryFilter;
+      return loc.layerName == _categoryFilter ||
+          loc.industry == _categoryFilter;
     }).toList();
 
     // Start/end labels for info bar
     final startLoc = _findLocation(data.locations, _startLocationId);
     final endLoc = _findLocation(data.locations, _endLocationId);
 
-
     return SafeArea(
       bottom: false,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isDesktop = constraints.maxWidth >= 600;
-          final isFiltering = _searchQuery.trim().isNotEmpty ||
+          final isFiltering =
+              _searchQuery.trim().isNotEmpty ||
               (_categoryFilter != 'all' && _categoryFilter != 'more');
           final matchingFeatureIds = filteredLocations
               .expand((location) => [location.id, location.featureId])
@@ -434,11 +443,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
               .toSet();
           final filteredFeatures = isFiltering
               ? data.buildings
-                  .where(
-                    (feature) => feature.featureId != null &&
-                        matchingFeatureIds.contains(feature.featureId),
-                  )
-                  .toList()
+                    .where(
+                      (feature) =>
+                          feature.featureId != null &&
+                          matchingFeatureIds.contains(feature.featureId),
+                    )
+                    .toList()
               : data.buildings;
 
           return Stack(
@@ -459,7 +469,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     controller: _transformController,
                     categoryFilter: _categoryFilter,
                     onRotationStart: () {
-
                       _gestureRotationStart = _mapRotation;
                     },
                     onRotationUpdate: (angle) {
@@ -467,19 +476,23 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                         _mapRotation = _gestureRotationStart + angle;
                       });
                     },
-                    onDoubleTap: () => _zoom(1.8),
+                    onDoubleTap: (position) => _zoom(2, focalPoint: position),
 
                     onSelectArea: (area) => _onCanvasTap(area, data),
                     route: _currentRoute,
-                    startPoint: (_currentRoute != null &&
-                            _startLocationId.isNotEmpty)
-                        ? _findLocation(data.locations, _startLocationId)
-                              ?.position
+                    startPoint:
+                        (_currentRoute != null && _startLocationId.isNotEmpty)
+                        ? _findLocation(
+                            data.locations,
+                            _startLocationId,
+                          )?.position
                         : null,
-                    endPoint: (_currentRoute != null &&
-                            _endLocationId.isNotEmpty)
-                        ? _findLocation(data.locations, _endLocationId)
-                              ?.position
+                    endPoint:
+                        (_currentRoute != null && _endLocationId.isNotEmpty)
+                        ? _findLocation(
+                            data.locations,
+                            _endLocationId,
+                          )?.position
                         : null,
                     userLocation: _userLocation,
                     userLocationAccuracy: _userLocationAccuracy,
@@ -521,7 +534,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   ),
                 ),
 
-
               // ── 3. Right toolbar (always on desktop, hidden on mobile when panel open)
               if (isDesktop || _activePanel == null)
                 Positioned(
@@ -552,8 +564,11 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   right: isDesktop ? null : 12,
                   width: isDesktop ? 380 : null,
                   child: RouteInfoBar(
-                    distanceMeters: _cityRoute!.distance + _cityRoute!.walkingDistance,
-                    walkingTime: travelTimeLabel(_cityRoute!.duration + _cityRoute!.walkingDuration),
+                    distanceMeters:
+                        _cityRoute!.distance + _cityRoute!.walkingDistance,
+                    walkingTime: travelTimeLabel(
+                      _cityRoute!.duration + _cityRoute!.walkingDuration,
+                    ),
                     startLabel: 'Live GPS Location',
                     endLabel: _cityRoute!.destinationLabel,
                     onEdit: () => setState(() => _activePanel = 'route'),
@@ -575,7 +590,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     onClear: _clearRoute,
                   ),
                 ),
-
 
               // ── 5. Legend overlay (bottom-right) ────────────────────────────
               if (_showLegend)
@@ -614,7 +628,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                 width: isDesktop
                     ? 372
                     : (constraints.maxWidth -
-                        (_activePanel == null ? 68.0 : 28.0)),
+                          (_activePanel == null ? 68.0 : 28.0)),
                 child: NavigatorSearchBox(
                   controller: _searchController,
                   isLeftOpen: _isLeftOpen,
@@ -720,8 +734,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           }),
         );
 
-
-
       case 'route':
         return RouteInputPanel(
           locations: data.locations,
@@ -790,7 +802,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           child: LegendOverlay(),
         );
 
-
       default:
         return const SizedBox();
     }
@@ -853,9 +864,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     final point = projection.project(loc.position);
 
     final currentScale = _transformController.value.getMaxScaleOnAxis();
-    final targetScale =
-        (math.max(currentScale, 4.5)).clamp(minMapScale, maxMapScale);
-
+    final targetScale = (math.max(
+      currentScale,
+      4.5,
+    )).clamp(minMapScale, maxMapScale);
 
     final target = Matrix4.identity()
       ..translate(
@@ -865,15 +877,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       ..scale(targetScale);
 
     _mapAnimationController.stop();
-    _mapAnimation = Matrix4Tween(
-      begin: _transformController.value.clone(),
-      end: target,
-    ).animate(
-      CurvedAnimation(
-        parent: _mapAnimationController,
-        curve: Curves.easeInOutCubic,
-      ),
-    );
+    _mapAnimation =
+        Matrix4Tween(
+          begin: _transformController.value.clone(),
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _mapAnimationController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
     _mapAnimationController.forward(from: 0);
   }
 
@@ -891,24 +904,18 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     final projection = data.projectionFor(size);
 
     // Fit all building features in view
-    final allPoints = data.buildings
-        .expand((b) => b.allPoints)
-        .toList();
+    final allPoints = data.buildings.expand((b) => b.allPoints).toList();
 
     if (allPoints.isEmpty) {
       _transformController.value = Matrix4.identity();
       return;
     }
 
-    final projected =
-        allPoints.map((p) => projection.project(p)).toList();
-    final left =
-        projected.map((o) => o.dx).reduce(math.min);
-    final right =
-        projected.map((o) => o.dx).reduce(math.max);
+    final projected = allPoints.map((p) => projection.project(p)).toList();
+    final left = projected.map((o) => o.dx).reduce(math.min);
+    final right = projected.map((o) => o.dx).reduce(math.max);
     final top = projected.map((o) => o.dy).reduce(math.min);
-    final bottom =
-        projected.map((o) => o.dy).reduce(math.max);
+    final bottom = projected.map((o) => o.dy).reduce(math.max);
 
     const padding = 40.0;
     final routeW = math.max(1.0, right - left);
@@ -927,15 +934,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       ..scale(scale);
 
     _mapAnimationController.stop();
-    _mapAnimation = Matrix4Tween(
-      begin: _transformController.value.clone(),
-      end: target,
-    ).animate(
-      CurvedAnimation(
-        parent: _mapAnimationController,
-        curve: Curves.easeInOutCubic,
-      ),
-    );
+    _mapAnimation =
+        Matrix4Tween(
+          begin: _transformController.value.clone(),
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _mapAnimationController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
     _mapAnimationController.forward(from: 0);
   }
 
@@ -944,8 +952,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     setState(() => _routeNotice = null);
 
     if (_startLocationId.isEmpty || _endLocationId.isEmpty) {
-      setState(() => _routeNotice =
-          'Please select both start and destination points.');
+      setState(
+        () => _routeNotice = 'Please select both start and destination points.',
+      );
       return;
     }
 
@@ -968,7 +977,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       return;
     }
 
-    final result = findNavigableRoute(start.nodeId, end.nodeId, data.nodes, data.edges);
+    final result = findNavigableRoute(
+      start.nodeId,
+      end.nodeId,
+      data.nodes,
+      data.edges,
+    );
     if (result == null) {
       setState(
         () => _routeNotice = 'No path was found between these locations.',
@@ -993,7 +1007,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   Future<void> _navigateFromGpsToDestination(ExhibitionMapData data) async {
     final destination = _findLocation(data.locations, _endLocationId);
     if (destination == null) {
-      setState(() => _routeNotice = 'Select the booth or place you want to navigate to.');
+      setState(
+        () =>
+            _routeNotice = 'Select the booth or place you want to navigate to.',
+      );
       return;
     }
 
@@ -1003,13 +1020,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         final req = await Geolocator.requestPermission();
-        if (req == LocationPermission.denied || req == LocationPermission.deniedForever) {
+        if (req == LocationPermission.denied ||
+            req == LocationPermission.deniedForever) {
           throw Exception('Location permission was denied.');
         }
       }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
 
       setState(() => _gpsMessage = 'Connecting city route to Gate 1...');
@@ -1018,7 +1038,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       const gateLng = 39.27701;
 
       final gateNode = nearestNode(GeoPoint(gateLng, gateLat), data.nodes);
-      final fairgroundRoute = findNavigableRoute(gateNode.id, destination.nodeId, data.nodes, data.edges);
+      final fairgroundRoute = findNavigableRoute(
+        gateNode.id,
+        destination.nodeId,
+        data.nodes,
+        data.edges,
+      );
       if (fairgroundRoute == null) {
         throw Exception('No path found from Gate 1 to ${destination.label}.');
       }
@@ -1031,7 +1056,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
       final response = await http.get(url).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) {
-        throw Exception('City driving route could not be calculated right now.');
+        throw Exception(
+          'City driving route could not be calculated right now.',
+        );
       }
 
       final payload = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1048,7 +1075,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
       final coords = rawCoords.map((c) {
         final pair = c as List<dynamic>;
-        return GeoPoint((pair[0] as num).toDouble(), (pair[1] as num).toDouble());
+        return GeoPoint(
+          (pair[0] as num).toDouble(),
+          (pair[1] as num).toDouble(),
+        );
       }).toList();
 
       final cityResult = CityRouteResult(
@@ -1064,7 +1094,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       setState(() {
         _cityRoute = cityResult;
         _currentRoute = fairgroundRoute;
-        _gpsMessage = 'Route ready to ${destination.label}. Drive to Gate 1 then walk ${fairgroundRoute.distance.round()} m.';
+        _gpsMessage =
+            'Route ready to ${destination.label}. Drive to Gate 1 then walk ${fairgroundRoute.distance.round()} m.';
         _activePanel = null;
       });
 
@@ -1076,7 +1107,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     } catch (e) {
       setState(() {
         _gpsMessage = null;
-        _routeNotice = e is Exception ? e.toString().replaceAll('Exception: ', '') : 'Could not calculate GPS route.';
+        _routeNotice = e is Exception
+            ? e.toString().replaceAll('Exception: ', '')
+            : 'Could not calculate GPS route.';
       });
     }
   }
@@ -1084,7 +1117,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   Future<void> _openTurnByTurnNavigation() async {
     try {
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
       );
       final url = Uri.parse(
         'https://www.google.com/maps/dir/?api=1'
@@ -1095,7 +1130,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         await launchUrl(url, mode: LaunchMode.externalApplication);
       }
     } catch (_) {
-      final url = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=-6.86392,39.27701&travelmode=driving');
+      final url = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=-6.86392,39.27701&travelmode=driving',
+      );
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       }
@@ -1126,10 +1163,11 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       RegExp(r'/api/map/?$'),
       '/navigator',
     );
-    final shareUrl = Uri.parse(baseUrl).replace(
-      queryParameters: {'fid': info.id},
-    ).toString();
-    final message = 'View ${info.companyName ?? info.label} at Sabasaba\n$shareUrl';
+    final shareUrl = Uri.parse(
+      baseUrl,
+    ).replace(queryParameters: {'fid': info.id}).toString();
+    final message =
+        'View ${info.companyName ?? info.label} at Sabasaba\n$shareUrl';
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -1147,22 +1185,32 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
               ),
               const SizedBox(height: 12),
               ListTile(
-                leading: const Icon(Icons.chat_rounded, color: Color(0xff16a34a)),
+                leading: const Icon(
+                  Icons.chat_rounded,
+                  color: Color(0xff16a34a),
+                ),
                 title: const Text('WhatsApp'),
                 onTap: () async {
                   Navigator.pop(sheetContext);
                   await launchUrl(
-                    Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}'),
+                    Uri.parse(
+                      'https://wa.me/?text=${Uri.encodeComponent(message)}',
+                    ),
                     mode: LaunchMode.externalApplication,
                   );
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.sms_rounded, color: Color(0xff0284c7)),
+                leading: const Icon(
+                  Icons.sms_rounded,
+                  color: Color(0xff0284c7),
+                ),
                 title: const Text('Message'),
                 onTap: () async {
                   Navigator.pop(sheetContext);
-                  await launchUrl(Uri.parse('sms:?body=${Uri.encodeComponent(message)}'));
+                  await launchUrl(
+                    Uri.parse('sms:?body=${Uri.encodeComponent(message)}'),
+                  );
                 },
               ),
               ListTile(
@@ -1185,7 +1233,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       ),
     );
   }
-
 
   // ─── Fit route to screen ──────────────────────────────────────────────────
   void _fitRouteToScreen(ExhibitionMapData data, RouteResult route) {
@@ -1227,15 +1274,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       ..scale(scale);
 
     _mapAnimationController.stop();
-    _mapAnimation = Matrix4Tween(
-      begin: _transformController.value.clone(),
-      end: target,
-    ).animate(
-      CurvedAnimation(
-        parent: _mapAnimationController,
-        curve: Curves.easeInOutCubic,
-      ),
-    );
+    _mapAnimation =
+        Matrix4Tween(
+          begin: _transformController.value.clone(),
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _mapAnimationController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
     _mapAnimationController.forward(from: 0);
   }
 
@@ -1248,20 +1296,37 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     return null;
   }
 
-  void _zoom(double factor) {
+  void _zoom(double factor, {Offset? focalPoint}) {
     final current = _transformController.value;
     final currentScale = current.getMaxScaleOnAxis();
     final nextScale = (currentScale * factor).clamp(minMapScale, maxMapScale);
     if (currentScale == nextScale) return;
-    final adjustedFactor = nextScale / currentScale;
+
+    final renderBox =
+        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    final focal =
+        focalPoint ??
+        (renderBox != null && renderBox.hasSize
+            ? renderBox.size.center(Offset.zero)
+            : Offset.zero);
+    final scenePoint = _transformController.toScene(focal);
+
+    // Preserve the geographic point below the tap, matching Leaflet's
+    // double-click zoom-around-cursor behaviour.
     _transformController.value =
-        current.scaled(adjustedFactor, adjustedFactor);
+        Matrix4.diagonal3Values(nextScale, nextScale, 1)..setTranslationRaw(
+          focal.dx - scenePoint.dx * nextScale,
+          focal.dy - scenePoint.dy * nextScale,
+          0,
+        );
   }
 
   Future<void> _locateMe(ExhibitionMapData data) async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
-        throw Exception('Location services are disabled. Turn on GPS and try again.');
+        throw Exception(
+          'Location services are disabled. Turn on GPS and try again.',
+        );
       }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -1317,15 +1382,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       )
       ..scale(scale);
     _mapAnimationController.stop();
-    _mapAnimation = Matrix4Tween(
-      begin: _transformController.value.clone(),
-      end: target,
-    ).animate(
-      CurvedAnimation(
-        parent: _mapAnimationController,
-        curve: Curves.easeInOutCubic,
-      ),
-    );
+    _mapAnimation =
+        Matrix4Tween(
+          begin: _transformController.value.clone(),
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _mapAnimationController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
     _mapAnimationController.forward(from: 0);
   }
 
@@ -1363,8 +1429,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
   Future<void> _monitorConnectivity() async {
     final connectivity = Connectivity();
-    _connectivitySubscription =
-        connectivity.onConnectivityChanged.listen(_updateConnectivity);
+    _connectivitySubscription = connectivity.onConnectivityChanged.listen(
+      _updateConnectivity,
+    );
     _updateConnectivity(await connectivity.checkConnectivity());
   }
 

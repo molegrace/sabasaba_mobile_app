@@ -2,69 +2,110 @@ part of '../../../../main.dart';
 
 class MapTileLayer extends StatelessWidget {
   const MapTileLayer({
+    super.key,
     required this.data,
     required this.tileStyle,
     required this.refreshGeneration,
     required this.controller,
+    required this.rotation,
   });
 
   final ExhibitionMapData data;
   final MapTileStyle tileStyle;
   final int refreshGeneration;
   final TransformationController controller;
+  final double rotation;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = Size(constraints.maxWidth, constraints.maxHeight);
-        final projection = data.projectionFor(size);
-        final visibleBounds = projection.visibleBounds;
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final size = Size(constraints.maxWidth, constraints.maxHeight);
+            final projection = data.projectionFor(size);
+            final visibleBounds = _visibleGeoBounds(size, projection);
 
-        final currentScale = math.max(0.01, controller.value.getMaxScaleOnAxis());
-        final baseZoom = tileStyle.zoom;
-        final zoomOffset = (math.log(currentScale) / math.ln2).round();
-        final zoom = (baseZoom + zoomOffset).clamp(1, 19);
+            final currentScale = math.max(
+              minMapScale,
+              controller.value.getMaxScaleOnAxis(),
+            );
+            final zoomOffset = (math.log(currentScale) / math.ln2).round();
+            final mapZoom = (initialMapZoom + zoomOffset)
+                .clamp(minMapZoom, maxMapZoom)
+                .toInt();
+            final zoom = math.min(mapZoom, tileStyle.maxNativeZoom);
 
-        final maxTile = (1 << zoom) - 1;
+            final maxTile = (1 << zoom) - 1;
 
-        final minX = _clampTile(
-          _lngToTileX(visibleBounds.minLng, zoom) - 6,
-          maxTile,
-        );
-        final maxX = _clampTile(
-          _lngToTileX(visibleBounds.maxLng, zoom) + 6,
-          maxTile,
-        );
-        final minY = _clampTile(
-          _latToTileY(visibleBounds.maxLat, zoom) - 6,
-          maxTile,
-        );
-        final maxY = _clampTile(
-          _latToTileY(visibleBounds.minLat, zoom) + 6,
-          maxTile,
-        );
+            // Leaflet keeps a two-tile buffer around the viewport so a small
+            // pan does not expose an unloaded edge.
+            const keepBuffer = 2;
+            final minX = _clampTile(
+              _lngToTileX(visibleBounds.minLng, zoom) - keepBuffer,
+              maxTile,
+            );
+            final maxX = _clampTile(
+              _lngToTileX(visibleBounds.maxLng, zoom) + keepBuffer,
+              maxTile,
+            );
+            final minY = _clampTile(
+              _latToTileY(visibleBounds.maxLat, zoom) - keepBuffer,
+              maxTile,
+            );
+            final maxY = _clampTile(
+              _latToTileY(visibleBounds.minLat, zoom) + keepBuffer,
+              maxTile,
+            );
 
-
-
-        return ColoredBox(
-          color: tileStyle.fallbackColor,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              for (var x = minX; x <= maxX; x++)
-                for (var y = minY; y <= maxY; y++)
-                  TileImage(
-                    rect: _tileRect(x, y, zoom, projection),
-                    url: tileStyle.tileUrl(x, y, zoom),
-                    fallbackColor: tileStyle.fallbackColor,
-                    refreshGeneration: refreshGeneration,
-                  ),
-            ],
-          ),
+            return ColoredBox(
+              color: tileStyle.fallbackColor,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  for (var x = minX; x <= maxX; x++)
+                    for (var y = minY; y <= maxY; y++)
+                      TileImage(
+                        key: ValueKey(tileStyle.tileUrl(x, y, zoom)),
+                        rect: _tileRect(x, y, zoom, projection),
+                        url: tileStyle.tileUrl(x, y, zoom),
+                        fallbackColor: tileStyle.fallbackColor,
+                        refreshGeneration: refreshGeneration,
+                      ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
+  }
+
+  GeoBounds _visibleGeoBounds(Size size, MapProjection projection) {
+    final center = size.center(Offset.zero);
+    final sceneCorners =
+        <Offset>[
+              Offset.zero,
+              Offset(size.width, 0),
+              Offset(size.width, size.height),
+              Offset(0, size.height),
+            ]
+            .map(controller.toScene)
+            .map((point) {
+              final translated = point - center;
+              final cosA = math.cos(-rotation);
+              final sinA = math.sin(-rotation);
+              return Offset(
+                    translated.dx * cosA - translated.dy * sinA,
+                    translated.dx * sinA + translated.dy * cosA,
+                  ) +
+                  center;
+            })
+            .map(projection.unproject)
+            .toList();
+
+    return GeoBounds.fromPoints(sceneCorners);
   }
 
   Rect _tileRect(int x, int y, int zoom, MapProjection projection) {
@@ -107,6 +148,7 @@ class MapTileLayer extends StatelessWidget {
 
 class TileImage extends StatefulWidget {
   const TileImage({
+    super.key,
     required this.rect,
     required this.url,
     required this.fallbackColor,

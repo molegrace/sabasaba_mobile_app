@@ -19,6 +19,7 @@ class MapFeature {
 
   final Layer layer;
   final int index;
+
   /// The database UUID of this feature (top-level `id` from the features table).
   final String? featureId;
   final Object? id;
@@ -26,15 +27,18 @@ class MapFeature {
   final List<List<GeoPoint>> polygons;
   final List<List<GeoPoint>> lines;
   final List<GeoPoint> points;
+
   /// Full raw properties map from Supabase for use in the detail panel.
   final Map<String, dynamic> rawProperties;
+
   /// The editor key and display name supplied by the map manager.
   final String layerKey;
   final String layerName;
   final Color layerColor;
   final Color layerFill;
 
-  String get key => '${layer.name}-$index-${featureId ?? id ?? code ?? 'feature'}';
+  String get key =>
+      '${layer.name}-$index-${featureId ?? id ?? code ?? 'feature'}';
 
   String get shortCode {
     final raw = (code?.isNotEmpty ?? false) ? code! : '${id ?? index + 1}';
@@ -144,7 +148,8 @@ class MapFeature {
       points.add(_parsePoint(coordinates as List<dynamic>));
     }
 
-    final nameVal = properties['name'] ??
+    final nameVal =
+        properties['name'] ??
         properties['booth_code'] ??
         properties['number'] ??
         properties['1'] ??
@@ -156,19 +161,18 @@ class MapFeature {
     final defaultColor = layer == Layer.road
         ? const Color(0xff34d399)
         : (layer == Layer.boundary
-            ? const Color(0xff0f766e)
-            : (layer == Layer.tree
-                ? const Color(0xff059669)
-                : const Color(0xff374151)));
+              ? const Color(0xff0f766e)
+              : (layer == Layer.tree
+                    ? const Color(0xff059669)
+                    : const Color(0xff374151)));
 
     final defaultFill = layer == Layer.road
         ? const Color(0xff34d399)
-
         : (layer == Layer.boundary
-            ? const Color(0x220d9488)
-            : (layer == Layer.tree
-                ? const Color(0xff10b981)
-                : const Color(0xff949e9b)));
+              ? const Color(0x220d9488)
+              : (layer == Layer.tree
+                    ? const Color(0xff10b981)
+                    : const Color(0xff949e9b)));
 
     return MapFeature(
       layer: layer,
@@ -185,7 +189,6 @@ class MapFeature {
       layerColor: _parseHexColor(cHex, defaultColor),
       layerFill: _parseHexColor(fHex, defaultFill),
     );
-
   }
 
   static Color _parseHexColor(String? colorStr, Color fallback) {
@@ -203,7 +206,6 @@ class MapFeature {
     }
     return fallback;
   }
-
 
   static List<GeoPoint> _parseLine(List<dynamic> line) {
     return line.map((point) => _parsePoint(point as List<dynamic>)).toList();
@@ -230,7 +232,7 @@ enum MapTileStyle {
     Icons.map_outlined,
     Color(0xfff2efe9),
     Color(0xff5c8f6c),
-    17,
+    19,
     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   ),
   satellite(
@@ -238,7 +240,7 @@ enum MapTileStyle {
     Icons.satellite_alt_outlined,
     Color(0xff243327),
     Color(0xff697a48),
-    17,
+    19,
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   ),
   terrain(
@@ -246,7 +248,7 @@ enum MapTileStyle {
     Icons.terrain_outlined,
     Color(0xffe3ead7),
     Color(0xff6d9467),
-    16,
+    17,
     'https://tile.opentopomap.org/{z}/{x}/{y}.png',
   ),
   light(
@@ -254,7 +256,7 @@ enum MapTileStyle {
     Icons.wb_sunny_outlined,
     Color(0xfff4f6f2),
     Color(0xff87968d),
-    17,
+    20,
     'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
   );
 
@@ -263,7 +265,7 @@ enum MapTileStyle {
     this.icon,
     this.fallbackColor,
     this.accentColor,
-    this.zoom,
+    this.maxNativeZoom,
     this.urlTemplate,
   );
 
@@ -271,7 +273,12 @@ enum MapTileStyle {
   final IconData icon;
   final Color accentColor;
   final Color fallbackColor;
-  final int zoom;
+
+  /// Highest zoom level for which the provider has real tile imagery.
+  ///
+  /// Above this level the navigator scales the highest-resolution tiles, just
+  /// like Leaflet's `maxNativeZoom` option on the web navigator.
+  final int maxNativeZoom;
   final String urlTemplate;
 
   String tileUrl(int x, int y, int z) {

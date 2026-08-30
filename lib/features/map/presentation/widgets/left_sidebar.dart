@@ -32,24 +32,14 @@ class LeftSidebar extends StatelessWidget {
       name: 'Saved Locations',
       icon: Icons.bookmark_rounded,
     ),
-    _SidebarItem(
-      label: 'filters',
-      name: 'Filters',
-      icon: Icons.tune_rounded,
-    ),
-    _SidebarItem(
-      label: 'legend',
-      name: 'Map Legend',
-      icon: Icons.info_rounded,
-    ),
+    _SidebarItem(label: 'filters', name: 'Filters', icon: Icons.tune_rounded),
+    _SidebarItem(label: 'legend', name: 'Map Legend', icon: Icons.info_rounded),
     _SidebarItem(
       label: 'help',
       name: 'Navigator Help',
       icon: Icons.help_rounded,
     ),
   ];
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -81,10 +71,7 @@ class LeftSidebar extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.96),
                   border: Border(
-                    right: BorderSide(
-                      color: Colors.grey.shade200,
-                      width: 1,
-                    ),
+                    right: BorderSide(color: Colors.grey.shade200, width: 1),
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -202,14 +189,18 @@ class _SidebarNavItem extends StatelessWidget {
                       : const Color(0xff64748b),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  item.name,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    color: isActive
-                        ? const Color(0xff0369a1)
-                        : const Color(0xff334155),
+                Expanded(
+                  child: Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                      color: isActive
+                          ? const Color(0xff0369a1)
+                          : const Color(0xff334155),
+                    ),
                   ),
                 ),
               ],

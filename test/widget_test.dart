@@ -82,7 +82,9 @@ void main() {
     expect(find.byType(TextField), findsWidgets);
   });
 
-  testWidgets('double tapping the map zooms out', (WidgetTester tester) async {
+  testWidgets('double tapping the map zooms in one level', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       SabaSabaApp(mapData: Future.value(createMapData())),
     );
@@ -101,7 +103,62 @@ void main() {
 
     expect(
       viewer.transformationController!.value.getMaxScaleOnAxis(),
-      lessThan(2.0), // zoomed out from 2x
+      closeTo(4.0, 0.001),
+    );
+  });
+
+  testWidgets('tile layer reloads at native zoom and overzooms at the cap', (
+    WidgetTester tester,
+  ) async {
+    final controller = TransformationController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 400,
+          height: 600,
+          child: MapTileLayer(
+            data: createMapData(),
+            tileStyle: MapTileStyle.openStreetMap,
+            refreshGeneration: 0,
+            controller: controller,
+            rotation: 0,
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.widgetList<TileImage>(find.byType(TileImage)),
+      everyElement(predicate<TileImage>((tile) => tile.url.contains('/17/'))),
+    );
+
+    controller.value = Matrix4.diagonal3Values(2, 2, 1);
+    await tester.pump();
+    expect(
+      tester.widgetList<TileImage>(find.byType(TileImage)),
+      everyElement(predicate<TileImage>((tile) => tile.url.contains('/18/'))),
+    );
+
+    final beforePan = tester
+        .widgetList<TileImage>(find.byType(TileImage))
+        .map((tile) => tile.url)
+        .toSet();
+    controller.value = Matrix4.diagonal3Values(2, 2, 1)
+      ..setTranslationRaw(-400, 0, 0);
+    await tester.pump();
+    final afterPan = tester
+        .widgetList<TileImage>(find.byType(TileImage))
+        .map((tile) => tile.url)
+        .toSet();
+    expect(afterPan, isNot(equals(beforePan)));
+
+    controller.value = Matrix4.diagonal3Values(maxMapScale, maxMapScale, 1);
+    await tester.pump();
+    expect(
+      tester.widgetList<TileImage>(find.byType(TileImage)),
+      everyElement(predicate<TileImage>((tile) => tile.url.contains('/19/'))),
     );
   });
 }
