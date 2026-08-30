@@ -303,27 +303,7 @@ class ExhibitionMapPainter extends CustomPainter {
       }
     }
 
-    // Paint city driving route polyline if present
-    final activeCityRoute = cityRoute;
-    if (activeCityRoute != null && activeCityRoute.coordinates.isNotEmpty) {
-      final cityPoints = activeCityRoute.coordinates
-          .map((gp) => projection.project(gp))
-          .toList();
-      final cityHaloPaint = Paint()
-        ..color = const Color(0x446366f1)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 10.0 / currentScale
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round;
-      final cityPaint = Paint()
-        ..color = const Color(0xff4f46e5) // indigo-600 driving route
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 6.0 / currentScale
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round;
-      _drawDashedPolyline(canvas, cityPoints, cityHaloPaint);
-      _drawDashedPolyline(canvas, cityPoints, cityPaint);
-    }
+
 
     final activeRoute = route;
 

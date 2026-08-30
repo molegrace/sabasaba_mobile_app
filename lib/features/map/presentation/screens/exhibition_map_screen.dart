@@ -563,25 +563,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
 
               // ── 4. Bottom route info bar ─────────────────────────────────────
-              if (_cityRoute != null)
-                Positioned(
-                  bottom: 16,
-                  left: isDesktop && _activePanel != null ? 416 : 12,
-                  right: isDesktop ? null : 12,
-                  width: isDesktop ? 380 : null,
-                  child: RouteInfoBar(
-                    distanceMeters:
-                        _cityRoute!.distance + _cityRoute!.walkingDistance,
-                    walkingTime: travelTimeLabel(
-                      _cityRoute!.duration + _cityRoute!.walkingDuration,
-                    ),
-                    startLabel: 'Live GPS Location',
-                    endLabel: _cityRoute!.destinationLabel,
-                    onEdit: () => setState(() => _activePanel = 'route'),
-                    onClear: _clearRoute,
-                  ),
-                )
-              else if (_currentRoute != null)
+              if (_currentRoute != null)
                 Positioned(
                   bottom: 16,
                   left: isDesktop && _activePanel != null ? 416 : 12,
@@ -590,12 +572,15 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   child: RouteInfoBar(
                     distanceMeters: _currentRoute!.distance,
                     walkingTime: walkingTimeLabel(_currentRoute!.distance),
-                    startLabel: startLoc?.label,
-                    endLabel: endLoc?.label,
+                    startLabel: _startLocationId == gpsStartId
+                        ? 'Live GPS Location'
+                        : (startLoc?.label ?? 'Start Location'),
+                    endLabel: endLoc?.label ?? _selectedFeatureInfo?.label ?? 'Destination',
                     onEdit: () => setState(() => _activePanel = 'route'),
                     onClear: _clearRoute,
                   ),
                 ),
+
 
               // ── 5. Legend overlay (bottom-right) ────────────────────────────
               if (_showLegend)
@@ -1083,107 +1068,75 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       setState(() {
         _userLocation = userPoint;
         _userLocationAccuracy = position.accuracy;
-        _gpsMessage = 'Connecting route to ${destination.label}...';
+        _gpsMessage = 'Mapping A* route to ${destination.label}...';
       });
       _startLiveLocationStream();
 
+      // Find nearest graph node to visitor's position using A* algorithm
+      final startNode = nearestNode(userPoint, data.nodes);
+      var routeResult = findNavigableRoute(
+        startNode.id,
+        destination.nodeId,
+        data.nodes,
+        data.edges,
+      );
+
+      routeResult ??= RouteResult(
+        nodeIds: [startNode.id, destination.nodeId],
+        distance: ((position.latitude - destination.position.lat).abs() +
+                (position.longitude - destination.position.lng).abs()) *
+            111000,
+      );
+
+      setState(() {
+        _cityRoute = null; // Ensure only ONE single A* route line is painted
+        _currentRoute = routeResult;
+        _gpsMessage =
+            'Directions mapped to ${destination.label} from your location.';
+        _activePanel = null;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identical(_currentRoute, routeResult)) {
+          _fitRouteToScreen(data, routeResult!);
+        }
+      });
+    } catch (e) {
+      // Fallback if GPS position is unavailable
       const gateLat = -6.86392;
       const gateLng = 39.27701;
       final gateGeo = const GeoPoint(gateLng, gateLat);
-
       final gateNode = nearestNode(gateGeo, data.nodes);
-      var fairgroundRoute = findNavigableRoute(
+      var routeResult = findNavigableRoute(
         gateNode.id,
         destination.nodeId,
         data.nodes,
         data.edges,
       );
 
-      fairgroundRoute ??= RouteResult(
+      routeResult ??= RouteResult(
         nodeIds: [gateNode.id, destination.nodeId],
         distance: ((gateLat - destination.position.lat).abs() +
                 (gateLng - destination.position.lng).abs()) *
             111000,
       );
 
-
-      List<GeoPoint> coords = [];
-      double distance = 0;
-      double duration = 0;
-
-      try {
-        final url = Uri.parse(
-          'https://router.project-osrm.org/route/v1/driving/'
-          '${position.longitude},${position.latitude};$gateLng,$gateLat'
-          '?overview=full&geometries=geojson&steps=false',
-        );
-
-        final response =
-            await http.get(url).timeout(const Duration(seconds: 8));
-        if (response.statusCode == 200) {
-          final payload = jsonDecode(response.body) as Map<String, dynamic>;
-          final routes = payload['routes'] as List<dynamic>?;
-          if (routes != null && routes.isNotEmpty) {
-            final firstRoute = routes.first as Map<String, dynamic>;
-            distance = (firstRoute['distance'] as num).toDouble();
-            duration = (firstRoute['duration'] as num).toDouble();
-            final geometry = firstRoute['geometry'] as Map<String, dynamic>;
-            final rawCoords = geometry['coordinates'] as List<dynamic>;
-
-            coords = rawCoords.map((c) {
-              final pair = c as List<dynamic>;
-              return GeoPoint(
-                (pair[0] as num).toDouble(),
-                (pair[1] as num).toDouble(),
-              );
-            }).toList();
-          }
-        }
-      } catch (_) {
-        // Fallback straight-line city connection if OSRM is offline/unreachable
-      }
-
-      if (coords.isEmpty) {
-        coords = [userPoint, gateGeo];
-        distance = ((position.latitude - gateLat).abs() +
-                (position.longitude - gateLng).abs()) *
-            111000;
-        duration = distance / 10; // ~36 km/h
-      }
-
-      final cityResult = CityRouteResult(
-        distance: distance,
-        duration: duration,
-        coordinates: coords,
-        walkingDistance: fairgroundRoute.distance,
-        walkingDuration: fairgroundRoute.distance / (5000 / 3600),
-        destinationId: destination.id,
-        destinationLabel: destination.label,
-      );
-
       setState(() {
-        _cityRoute = cityResult;
-        _currentRoute = fairgroundRoute;
+        _cityRoute = null;
+        _currentRoute = routeResult;
         _gpsMessage =
-            'Directions connected to ${destination.label} from your location.';
+            'Route mapped from SabaSaba entrance gate to ${destination.label}.';
         _activePanel = null;
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && identical(_currentRoute, fairgroundRoute)) {
-          _fitRouteToScreen(data, fairgroundRoute!);
+        if (mounted && identical(_currentRoute, routeResult)) {
+          _fitRouteToScreen(data, routeResult!);
         }
-      });
-
-    } catch (e) {
-      setState(() {
-        _gpsMessage = null;
-        _routeNotice = e is Exception
-            ? e.toString().replaceAll('Exception: ', '')
-            : 'Could not calculate GPS route.';
       });
     }
   }
+
 
   Future<void> _openTurnByTurnNavigation() async {
     try {
