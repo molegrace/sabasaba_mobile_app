@@ -44,10 +44,8 @@ class MapCanvas extends StatelessWidget {
   final GeoPoint? userLocation;
   final double? userLocationAccuracy;
 
-
   @override
   Widget build(BuildContext context) {
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -87,6 +85,10 @@ class MapCanvas extends StatelessWidget {
                   angle: rotation,
                   child: Stack(
                     fit: StackFit.expand,
+                    // Road routes can extend far outside the fairground-sized
+                    // scene before the InteractiveViewer fits and transforms
+                    // them into the viewport.
+                    clipBehavior: Clip.none,
                     children: [
                       MapTileLayer(
                         data: data,
@@ -303,56 +305,56 @@ class ExhibitionMapPainter extends CustomPainter {
       }
     }
 
-
-
     final activeRoute = route;
+    final activeCityRoute = cityRoute;
 
-    if (activeRoute != null && startPoint != null && endPoint != null) {
-      final routePoints = <Offset>[];
+    if (activeRoute != null && endPoint != null) {
+      final fairgroundRoutePoints = <Offset>[];
       final nodeById = {for (final node in data.nodes) node.id: node};
       for (final nodeId in activeRoute.nodeIds) {
         final node = nodeById[nodeId];
         if (node != null) {
-          routePoints.add(
+          fairgroundRoutePoints.add(
             projection.project(GeoPoint(node.longitude, node.latitude)),
           );
         }
       }
 
-      if (routePoints.isEmpty) {
-        routePoints.add(projection.project(startPoint!));
-        routePoints.add(projection.project(endPoint!));
+      final routeHaloPaint = Paint()
+        ..color = const Color(0x440284c7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8.0 / currentScale
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      final routePaint = Paint()
+        ..color = const Color(0xff0284c7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4.5 / currentScale
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+
+      if (activeCityRoute != null) {
+        final roadRoutePoints = activeCityRoute.coordinates
+            .map(projection.project)
+            .toList();
+        _drawSolidPolyline(canvas, roadRoutePoints, routeHaloPaint);
+        _drawSolidPolyline(canvas, roadRoutePoints, routePaint);
+        _drawSolidPolyline(canvas, fairgroundRoutePoints, routeHaloPaint);
+        _drawSolidPolyline(canvas, fairgroundRoutePoints, routePaint);
       } else {
-        final firstPt = projection.project(startPoint!);
-        if ((routePoints.first - firstPt).distance > 2.0) {
-          routePoints.insert(0, firstPt);
-        }
-        final lastPt = projection.project(endPoint!);
-        if ((routePoints.last - lastPt).distance > 2.0) {
-          routePoints.add(lastPt);
-        }
+        _drawDashedPolyline(canvas, fairgroundRoutePoints, routeHaloPaint);
+        _drawDashedPolyline(canvas, fairgroundRoutePoints, routePaint);
       }
 
-
-      if (routePoints.isNotEmpty) {
-        final routeHaloPaint = Paint()
-          ..color = const Color(0x440284c7)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 8.0 / currentScale
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round;
-        final routePaint = Paint()
-          ..color = const Color(0xff0284c7) // sky-600 - matches web
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 4.5 / currentScale
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round;
-
-        _drawDashedPolyline(canvas, routePoints, routeHaloPaint);
-        _drawDashedPolyline(canvas, routePoints, routePaint);
-
-
-        // Paint start as an emerald dot (fixed size when zooming)
+      // Endpoint markers are intentionally not joined to the routing graph by
+      // straight lines. This matches the web navigator and prevents invented
+      // segments from cutting through buildings.
+      // The live GPS position already has its own blue accuracy marker.
+      // Avoid painting a second green marker that appears connected to the
+      // fairground-only section of the route.
+      if (activeCityRoute == null &&
+          startPoint != null &&
+          !identical(startPoint, userLocation)) {
         final startOffset = projection.project(startPoint!);
         canvas.drawCircle(
           startOffset,
@@ -362,31 +364,30 @@ class ExhibitionMapPainter extends CustomPainter {
         canvas.drawCircle(
           startOffset,
           4 / currentScale,
-          Paint()..color = const Color(0xff10b981), // emerald-500
-        );
-
-        // Paint the destination as a rose location pin
-        final endOffset = projection.project(endPoint!);
-        final destinationPainter = TextPainter(
-          text: TextSpan(
-            text: String.fromCharCode(Icons.location_pin.codePoint),
-            style: TextStyle(
-              color: const Color(0xfff43f5e), // rose-500 - matches web
-              fontSize: 16 / currentScale,
-              fontFamily: Icons.location_pin.fontFamily,
-              package: Icons.location_pin.fontPackage,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        destinationPainter.paint(
-          canvas,
-          Offset(
-            endOffset.dx - destinationPainter.width / 2,
-            endOffset.dy - destinationPainter.height,
-          ),
+          Paint()..color = const Color(0xff10b981),
         );
       }
+
+      final endOffset = projection.project(endPoint!);
+      final destinationPainter = TextPainter(
+        text: TextSpan(
+          text: String.fromCharCode(Icons.location_pin.codePoint),
+          style: TextStyle(
+            color: const Color(0xfff43f5e),
+            fontSize: 16 / currentScale,
+            fontFamily: Icons.location_pin.fontFamily,
+            package: Icons.location_pin.fontPackage,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      destinationPainter.paint(
+        canvas,
+        Offset(
+          endOffset.dx - destinationPainter.width / 2,
+          endOffset.dy - destinationPainter.height,
+        ),
+      );
     }
 
     final service = selectedService;
@@ -453,6 +454,15 @@ class ExhibitionMapPainter extends CustomPainter {
     }
   }
 
+  void _drawSolidPolyline(Canvas canvas, List<Offset> points, Paint paint) {
+    if (points.length < 2) return;
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var index = 1; index < points.length; index++) {
+      path.lineTo(points[index].dx, points[index].dy);
+    }
+    canvas.drawPath(path, paint);
+  }
+
   @override
   bool shouldRepaint(covariant ExhibitionMapPainter oldDelegate) {
     return data != oldDelegate.data ||
@@ -462,6 +472,7 @@ class ExhibitionMapPainter extends CustomPainter {
         categoryFilter != oldDelegate.categoryFilter ||
         scale != oldDelegate.scale ||
         route != oldDelegate.route ||
+        cityRoute != oldDelegate.cityRoute ||
         startPoint != oldDelegate.startPoint ||
         endPoint != oldDelegate.endPoint ||
         userLocation != oldDelegate.userLocation ||

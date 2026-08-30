@@ -11,6 +11,8 @@ class ExhibitionMapScreen extends StatefulWidget {
 
 class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     with SingleTickerProviderStateMixin {
+  static const GeoPoint _sabasabaGate = GeoPoint(39.27701, -6.86392);
+
   final TextEditingController _authNameController = TextEditingController();
   final TextEditingController _authEmailController = TextEditingController();
   final TextEditingController _authPasswordController = TextEditingController();
@@ -52,6 +54,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   CityRouteResult? _cityRoute;
   String? _routeNotice;
   String? _gpsMessage;
+  int _cityRouteRequestId = 0;
   List<String> _savedIds = [];
 
   // ─── Other tab state ────────────────────────────────────────────────────────
@@ -116,22 +119,20 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
   void _startLiveLocationStream() {
     _positionSubscription?.cancel();
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 2,
-      ),
-    ).listen(
-      (position) {
-        if (!mounted) return;
-        setState(() {
-          _locationAllowed = true;
-          _userLocation = GeoPoint(position.longitude, position.latitude);
-          _userLocationAccuracy = position.accuracy;
-        });
-      },
-      onError: (_) {},
-    );
+    _positionSubscription =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 2,
+          ),
+        ).listen((position) {
+          if (!mounted) return;
+          setState(() {
+            _locationAllowed = true;
+            _userLocation = GeoPoint(position.longitude, position.latitude);
+            _userLocationAccuracy = position.accuracy;
+          });
+        }, onError: (_) {});
   }
 
   @override
@@ -242,7 +243,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                 // ── Navigator Map View (index 2) ─────────────────────────────
                 return _buildMapView(data);
               },
-
             ),
           ),
         ],
@@ -383,7 +383,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     if (sq.isNotEmpty) {
       for (final loc in data.locations) {
         final matchesLabel = loc.label.toLowerCase().contains(sq);
-        final matchesComp = loc.companyName?.toLowerCase().contains(sq) ?? false;
+        final matchesComp =
+            loc.companyName?.toLowerCase().contains(sq) ?? false;
         final matchesDesc = loc.description.toLowerCase().contains(sq);
         final matchesInd = loc.industry?.toLowerCase().contains(sq) ?? false;
 
@@ -491,17 +492,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     cityRoute: _cityRoute,
                     startPoint:
                         ((_currentRoute != null || _cityRoute != null) &&
-                                _startLocationId.isNotEmpty)
-                            ? _resolvePoint(_startLocationId, data)
-                            : null,
+                            _startLocationId.isNotEmpty)
+                        ? _resolvePoint(_startLocationId, data)
+                        : null,
                     endPoint:
                         ((_currentRoute != null || _cityRoute != null) &&
-                                _endLocationId.isNotEmpty)
-                            ? _resolvePoint(_endLocationId, data)
-                            : null,
+                            _endLocationId.isNotEmpty)
+                        ? _resolvePoint(_endLocationId, data)
+                        : null,
                     userLocation: _userLocation,
                     userLocationAccuracy: _userLocationAccuracy,
-
                   ),
                 ),
               ),
@@ -561,7 +561,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                 ),
               ),
 
-
               // ── 4. Bottom route info bar ─────────────────────────────────────
               if (_currentRoute != null)
                 Positioned(
@@ -570,17 +569,28 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   right: isDesktop ? null : 12,
                   width: isDesktop ? 380 : null,
                   child: RouteInfoBar(
-                    distanceMeters: _currentRoute!.distance,
-                    walkingTime: walkingTimeLabel(_currentRoute!.distance),
+                    distanceMeters: _cityRoute != null
+                        ? _cityRoute!.distance + _cityRoute!.walkingDistance
+                        : _currentRoute!.distance,
+                    walkingTime: _cityRoute != null
+                        ? travelTimeLabel(
+                            _cityRoute!.duration + _cityRoute!.walkingDuration,
+                          )
+                        : walkingTimeLabel(_currentRoute!.distance),
+                    timeMetricLabel: _cityRoute != null
+                        ? 'Estimated Trip'
+                        : 'Walking Time',
                     startLabel: _startLocationId == gpsStartId
                         ? 'Live GPS Location'
                         : (startLoc?.label ?? 'Start Location'),
-                    endLabel: endLoc?.label ?? _selectedFeatureInfo?.label ?? 'Destination',
+                    endLabel:
+                        endLoc?.label ??
+                        _selectedFeatureInfo?.label ??
+                        'Destination',
                     onEdit: () => setState(() => _activePanel = 'route'),
                     onClear: _clearRoute,
                   ),
                 ),
-
 
               // ── 5. Legend overlay (bottom-right) ────────────────────────────
               if (_showLegend)
@@ -618,7 +628,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                 left: 14,
                 width: isDesktop ? 372 : (constraints.maxWidth - 68.0),
                 child: NavigatorSearchBox(
-
                   controller: _searchController,
                   isLeftOpen: _isLeftOpen,
                   onToggleSidebar: () =>
@@ -650,7 +659,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     });
                   },
                 ),
-
               ),
             ],
           );
@@ -719,7 +727,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           },
         );
 
-
       case 'saved':
         return SavedPanel(
           locations: data.locations,
@@ -754,11 +761,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           gpsMessage: _gpsMessage,
           cityRoute: _cityRoute,
           onStartChanged: (id) => setState(() {
+            _cityRouteRequestId += 1;
             _startLocationId = id;
             _currentRoute = null;
             _cityRoute = null;
           }),
           onEndChanged: (id) => setState(() {
+            _cityRouteRequestId += 1;
             _endLocationId = id;
             _currentRoute = null;
             _cityRoute = null;
@@ -786,7 +795,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           onShare: () => _shareFeature(info),
           onToggleSave: locId != null ? () => _toggleSaveLocation(locId) : null,
           onSetDestination: () {
-            final loc = info.location ?? _findLocation(data.locations, info.id, data);
+            final loc =
+                info.location ?? _findLocation(data.locations, info.id, data);
             if (loc != null) {
               setState(() {
                 _startLocationId = gpsStartId;
@@ -797,7 +807,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
             }
           },
           onSetStart: () {
-            final loc = info.location ?? _findLocation(data.locations, info.id, data);
+            final loc =
+                info.location ?? _findLocation(data.locations, info.id, data);
             if (loc != null) {
               setState(() {
                 _startLocationId = loc.id;
@@ -805,7 +816,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
               });
             }
           },
-
         );
 
       case 'help':
@@ -828,16 +838,18 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         ? _findLocation(data.locations, area.featureId!)
         : _findLocation(data.locations, area.key, data);
 
-    final targetLoc = loc ?? RoutingLocation(
-      id: area.featureId ?? area.key,
-      label: area.title,
-      description: area.layer.label,
-      layerName: area.layer.label,
-      position: area.center,
-      nodeId: nearestNode(area.center, data.nodes).id,
-      companyName: area.rawProperties['company_name'] as String?,
-      properties: area.rawProperties,
-    );
+    final targetLoc =
+        loc ??
+        RoutingLocation(
+          id: area.featureId ?? area.key,
+          label: area.title,
+          description: area.layer.label,
+          layerName: area.layer.label,
+          position: area.center,
+          nodeId: nearestNode(area.center, data.nodes).id,
+          companyName: area.rawProperties['company_name'] as String?,
+          properties: area.rawProperties,
+        );
 
     setState(() {
       _selectedAreaForCanvas = area;
@@ -884,7 +896,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
     _calculateRoute(data);
   }
-
 
   // ─── Focus map on a location ──────────────────────────────────────────────
   void _focusLocation(RoutingLocation loc, ExhibitionMapData data) {
@@ -1010,20 +1021,19 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       return;
     }
 
-    var result = findNavigableRoute(
+    final result = findNavigableRoute(
       start.nodeId,
       end.nodeId,
       data.nodes,
       data.edges,
     );
-
-    result ??= RouteResult(
-      nodeIds: [start.nodeId, end.nodeId],
-      distance: ((start.position.lat - end.position.lat).abs() +
-              (start.position.lng - end.position.lng).abs()) *
-          111000,
-    );
-
+    if (result == null) {
+      setState(() {
+        _routeNotice =
+            'The selected locations do not have usable navigation nodes.';
+      });
+      return;
+    }
 
     setState(() {
       _cityRoute = null;
@@ -1034,12 +1044,13 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && identical(_currentRoute, result)) {
-        _fitRouteToScreen(data, result!);
+        _fitRouteToScreen(data, result);
       }
     });
   }
 
   Future<void> _navigateFromGpsToDestination(ExhibitionMapData data) async {
+    final requestId = ++_cityRouteRequestId;
     final destination = _findLocation(data.locations, _endLocationId, data);
     if (destination == null) {
       setState(
@@ -1049,12 +1060,57 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       return;
     }
 
-    setState(() => _gpsMessage = 'Locating your current GPS position...');
+    if (data.nodes.isEmpty || destination.nodeId == 'no_node') {
+      setState(() {
+        _routeNotice =
+            'This destination is not connected to a mapped fairground path yet.';
+      });
+      return;
+    }
+
+    final gateLocation = data.locations.where((location) {
+      return location.label.trim().toLowerCase() == 'gate 1';
+    }).firstOrNull;
+    final gateNodeId = gateLocation != null && gateLocation.nodeId != 'no_node'
+        ? gateLocation.nodeId
+        : nearestNode(_sabasabaGate, data.nodes).id;
+    final routeResult = findNavigableRoute(
+      gateNodeId,
+      destination.nodeId,
+      data.nodes,
+      data.edges,
+    );
+    if (routeResult == null || routeResult.nodeIds.length < 2) {
+      setState(() {
+        _routeNotice =
+            'No usable navigation path was found from Gate 1 to ${destination.label}.';
+      });
+      return;
+    }
+
+    setState(() {
+      _routeNotice = null;
+      _gpsMessage =
+          'Finding your GPS position and building the route to ${destination.label}...';
+    });
 
     try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw Exception(
+          'Location services are disabled. Turn on GPS and try again.',
+        );
+      }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied) {
+        throw Exception('Location permission was denied.');
+      }
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception(
+          'Location permission is permanently denied. Enable it in device settings.',
+        );
       }
 
       final position = await Geolocator.getCurrentPosition(
@@ -1063,80 +1119,102 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           timeLimit: Duration(seconds: 15),
         ),
       );
+      if (!mounted || requestId != _cityRouteRequestId) return;
 
       final userPoint = GeoPoint(position.longitude, position.latitude);
       setState(() {
+        _locationAllowed = true;
         _userLocation = userPoint;
         _userLocationAccuracy = position.accuracy;
-        _gpsMessage = 'Mapping A* route to ${destination.label}...';
+        _gpsMessage =
+            'GPS found. Connecting the road route to the fairground paths...';
       });
       _startLiveLocationStream();
 
-      // Find nearest graph node to visitor's position using A* algorithm
-      final startNode = nearestNode(userPoint, data.nodes);
-      var routeResult = findNavigableRoute(
-        startNode.id,
-        destination.nodeId,
-        data.nodes,
-        data.edges,
+      final coordinates =
+          '${position.longitude},${position.latitude};'
+          '${_sabasabaGate.lng},${_sabasabaGate.lat}';
+      final uri = Uri.https(
+        'router.project-osrm.org',
+        '/route/v1/driving/$coordinates',
+        const {'overview': 'full', 'geometries': 'geojson', 'steps': 'false'},
       );
+      final response = await http.get(uri).timeout(const Duration(seconds: 20));
+      if (!mounted || requestId != _cityRouteRequestId) return;
 
-      routeResult ??= RouteResult(
-        nodeIds: [startNode.id, destination.nodeId],
-        distance: ((position.latitude - destination.position.lat).abs() +
-                (position.longitude - destination.position.lng).abs()) *
-            111000,
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception(
+          'The road routing service returned an invalid response.',
+        );
+      }
+      final routes = decoded['routes'];
+      final firstRoute = routes is List && routes.isNotEmpty
+          ? routes.first
+          : null;
+      final geometry = firstRoute is Map ? firstRoute['geometry'] : null;
+      final rawCoordinates = geometry is Map ? geometry['coordinates'] : null;
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          decoded['code'] != 'Ok' ||
+          firstRoute is! Map ||
+          rawCoordinates is! List) {
+        throw Exception(
+          'The road section could not be calculated right now. Please try again.',
+        );
+      }
+
+      final roadCoordinates = <GeoPoint>[];
+      for (final rawCoordinate in rawCoordinates) {
+        if (rawCoordinate is! List || rawCoordinate.length < 2) continue;
+        final longitude = rawCoordinate[0];
+        final latitude = rawCoordinate[1];
+        if (longitude is! num || latitude is! num) continue;
+        roadCoordinates.add(
+          GeoPoint(longitude.toDouble(), latitude.toDouble()),
+        );
+      }
+      if (roadCoordinates.length < 2) {
+        throw Exception(
+          'The road routing service did not return a usable route line.',
+        );
+      }
+
+      final cityRoute = CityRouteResult(
+        distance: (firstRoute['distance'] as num).toDouble(),
+        duration: (firstRoute['duration'] as num).toDouble(),
+        coordinates: roadCoordinates,
+        walkingDistance: routeResult.distance,
+        walkingDuration: routeResult.distance / (5000 / 3600),
+        destinationId: destination.id,
+        destinationLabel: destination.label,
       );
 
       setState(() {
-        _cityRoute = null; // Ensure only ONE single A* route line is painted
+        _cityRoute = cityRoute;
         _currentRoute = routeResult;
         _gpsMessage =
-            'Directions mapped to ${destination.label} from your location.';
+            'Complete route ready to ${destination.label} · GPS accuracy about ${position.accuracy.round()} m.';
+        _mapRotation = 0;
         _activePanel = null;
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && identical(_currentRoute, routeResult)) {
-          _fitRouteToScreen(data, routeResult!);
+        if (mounted &&
+            requestId == _cityRouteRequestId &&
+            identical(_cityRoute, cityRoute)) {
+          _fitCityRouteToScreen(data, cityRoute, routeResult);
         }
       });
-    } catch (e) {
-      // Fallback if GPS position is unavailable
-      const gateLat = -6.86392;
-      const gateLng = 39.27701;
-      final gateGeo = const GeoPoint(gateLng, gateLat);
-      final gateNode = nearestNode(gateGeo, data.nodes);
-      var routeResult = findNavigableRoute(
-        gateNode.id,
-        destination.nodeId,
-        data.nodes,
-        data.edges,
-      );
-
-      routeResult ??= RouteResult(
-        nodeIds: [gateNode.id, destination.nodeId],
-        distance: ((gateLat - destination.position.lat).abs() +
-                (gateLng - destination.position.lng).abs()) *
-            111000,
-      );
-
+    } catch (error) {
+      if (!mounted || requestId != _cityRouteRequestId) return;
       setState(() {
         _cityRoute = null;
-        _currentRoute = routeResult;
-        _gpsMessage =
-            'Route mapped from SabaSaba entrance gate to ${destination.label}.';
-        _activePanel = null;
-      });
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && identical(_currentRoute, routeResult)) {
-          _fitRouteToScreen(data, routeResult!);
-        }
+        _currentRoute = null;
+        _gpsMessage = error.toString().replaceFirst('Exception: ', '');
       });
     }
   }
-
 
   Future<void> _openTurnByTurnNavigation() async {
     try {
@@ -1164,6 +1242,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   }
 
   void _clearRoute() {
+    _cityRouteRequestId += 1;
     setState(() {
       _startLocationId = '';
       _endLocationId = '';
@@ -1311,6 +1390,64 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     _mapAnimationController.forward(from: 0);
   }
 
+  void _fitCityRouteToScreen(
+    ExhibitionMapData data,
+    CityRouteResult cityRoute,
+    RouteResult fairgroundRoute,
+  ) {
+    final renderBox =
+        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+
+    final size = renderBox.size;
+    final projection = data.projectionFor(size);
+    final nodeById = {for (final node in data.nodes) node.id: node};
+    final points = <Offset>[
+      ...cityRoute.coordinates.map(projection.project),
+      ...fairgroundRoute.nodeIds
+          .map((id) => nodeById[id])
+          .whereType<RoutingNode>()
+          .map(
+            (node) =>
+                projection.project(GeoPoint(node.longitude, node.latitude)),
+          ),
+    ];
+    if (points.length < 2) return;
+
+    final left = points.map((point) => point.dx).reduce(math.min);
+    final right = points.map((point) => point.dx).reduce(math.max);
+    final top = points.map((point) => point.dy).reduce(math.min);
+    final bottom = points.map((point) => point.dy).reduce(math.max);
+    const padding = 48.0;
+    final routeWidth = math.max(1.0, right - left);
+    final routeHeight = math.max(1.0, bottom - top);
+    final availableWidth = math.max(1.0, size.width - padding * 2);
+    final availableHeight = math.max(1.0, size.height - padding * 2);
+    final scale = math
+        .min(availableWidth / routeWidth, availableHeight / routeHeight)
+        .clamp(minMapScale, maxMapScale);
+    final routeCenter = Offset((left + right) / 2, (top + bottom) / 2);
+    final target = Matrix4.identity()
+      ..translate(
+        size.width / 2 - routeCenter.dx * scale,
+        size.height / 2 - routeCenter.dy * scale,
+      )
+      ..scale(scale);
+
+    _mapAnimationController.stop();
+    _mapAnimation =
+        Matrix4Tween(
+          begin: _transformController.value.clone(),
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _mapAnimationController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
+    _mapAnimationController.forward(from: 0);
+  }
+
   void _selectLocationFromSearch(RoutingLocation loc, ExhibitionMapData data) {
     final building = data.buildings
         .where((b) => b.featureId == loc.id || b.key == loc.id)
@@ -1334,17 +1471,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     _calculateRoute(data);
   }
 
-
   void _fitMapToArea(MapFeature building, ExhibitionMapData data) {
-
     final renderBox =
         _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) return;
 
     final size = renderBox.size;
     final projection = data.projectionFor(size);
-    final points =
-        building.allPoints.map((p) => projection.project(p)).toList();
+    final points = building.allPoints
+        .map((p) => projection.project(p))
+        .toList();
     if (points.isEmpty) return;
 
     final left = points.map((p) => p.dx).reduce(math.min);
@@ -1384,7 +1520,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-
   RoutingLocation? _findLocation(
     List<RoutingLocation> locations,
     String id, [
@@ -1410,7 +1545,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           companyName: building.rawProperties['company_name'] as String?,
           properties: building.rawProperties,
         );
-
       }
     }
     return null;
@@ -1424,8 +1558,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     final loc = _findLocation(data.locations, id, data);
     return loc?.position;
   }
-
-
 
   void _zoom(double factor, {Offset? focalPoint}) {
     final current = _transformController.value;
@@ -1486,7 +1618,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       });
       _startLiveLocationStream();
       _focusGeoPoint(point, data, targetScale: 6);
-
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

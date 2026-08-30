@@ -7,6 +7,7 @@ class RouteInfoBar extends StatelessWidget {
   const RouteInfoBar({
     required this.distanceMeters,
     required this.walkingTime,
+    this.timeMetricLabel = 'Walking Time',
     this.startLabel,
     this.endLabel,
     required this.onEdit,
@@ -15,6 +16,7 @@ class RouteInfoBar extends StatelessWidget {
 
   final double distanceMeters;
   final String walkingTime;
+  final String timeMetricLabel;
   final String? startLabel;
   final String? endLabel;
   final VoidCallback onEdit;
@@ -126,7 +128,9 @@ class RouteInfoBar extends StatelessWidget {
               Expanded(
                 child: _InfoMetric(
                   label: 'Distance',
-                  value: '${distanceMeters.round()} m',
+                  value: distanceMeters >= 1000
+                      ? '${(distanceMeters / 1000).toStringAsFixed(1)} km'
+                      : '${distanceMeters.round()} m',
                 ),
               ),
               Container(
@@ -136,10 +140,7 @@ class RouteInfoBar extends StatelessWidget {
                 margin: const EdgeInsets.symmetric(horizontal: 8),
               ),
               Expanded(
-                child: _InfoMetric(
-                  label: 'Walking Time',
-                  value: walkingTime,
-                ),
+                child: _InfoMetric(label: timeMetricLabel, value: walkingTime),
               ),
             ],
           ),
