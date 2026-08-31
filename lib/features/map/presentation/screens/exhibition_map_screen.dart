@@ -1756,6 +1756,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
   // ─── Fit route to screen ──────────────────────────────────────────────────
   void _fitRouteToScreen(ExhibitionMapData data, RouteResult route) {
+    final destination = _findLocation(data.locations, _endLocationId, data);
+    if (destination != null) {
+      _focusLocation(destination, data);
+      return;
+    }
+
     final renderBox =
         _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) return;
@@ -1812,6 +1818,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     CityRouteResult cityRoute,
     RouteResult fairgroundRoute,
   ) {
+    final destination = _findLocation(data.locations, _endLocationId, data);
+    if (destination != null) {
+      _focusLocation(destination, data);
+      return;
+    }
+
     final renderBox =
         _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) return;
