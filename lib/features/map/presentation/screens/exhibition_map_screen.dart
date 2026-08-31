@@ -615,7 +615,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   ),
                 ),
 
-              if (_activePanel != null)
+              if (_activePanel != null && _searchQuery.trim().isEmpty)
                 NavigatorMainPanel(
                   title: _panelTitle(data),
                   onClose: () => setState(() => _activePanel = null),
@@ -791,8 +791,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   onSearchChange: (value) {
                     setState(() {
                       _searchQuery = value;
-                      if (value.trim().isNotEmpty && _activePanel != 'spaces') {
-                        _activePanel = 'spaces';
+                      if (value.trim().isNotEmpty && _activePanel != null) {
+                        _activePanel = null;
                       }
                     });
                   },
@@ -802,16 +802,20 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                       _searchController.clear();
                     });
                   },
-                  onFocus: () {},
+                  onFocus: () {
+                    if (_activePanel != null) {
+                      setState(() {
+                        _activePanel = null;
+                      });
+                    }
+                  },
 
                   suggestions: searchSuggestions,
                   onSelectPopularTag: (tagQuery) {
                     setState(() {
                       _searchQuery = tagQuery;
                       _searchController.text = tagQuery;
-                      if (_activePanel != 'spaces') {
-                        _activePanel = 'spaces';
-                      }
+                      _activePanel = null;
                     });
                   },
                 ),
