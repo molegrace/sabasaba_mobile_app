@@ -154,9 +154,17 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       speed: position.speed,
       heading: position.heading,
     );
+    final prevProgress = _navigationProgress;
     if (!isNavigationReadingValid(reading)) return;
     final tracker = _navigationTracker;
     final progress = tracker?.update(reading);
+
+    if (progress != null &&
+        prevProgress?.status != NavigationStatus.offRoute &&
+        progress.status == NavigationStatus.offRoute) {
+      HapticFeedback.heavyImpact();
+    }
+
     setState(() {
       _locationAllowed = true;
       _userLocation = point;
@@ -630,40 +638,59 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   left: isDesktop && _activePanel != null ? 416 : 12,
                   right: isDesktop ? null : 12,
                   width: isDesktop ? 380 : null,
-                  child: RouteInfoBar(
-                    distanceMeters:
-                        _navigationProgress?.remainingDistance ??
-                        (_cityRoute != null
-                            ? _cityRoute!.distance + _cityRoute!.walkingDistance
-                            : _currentRoute!.distance),
-                    walkingTime: _navigationProgress != null
-                        ? walkingTimeLabel(
-                            _navigationProgress!.remainingDistance,
-                          )
-                        : _cityRoute != null
-                        ? travelTimeLabel(
-                            _cityRoute!.duration + _cityRoute!.walkingDuration,
-                          )
-                        : walkingTimeLabel(_currentRoute!.distance),
-                    timeMetricLabel: _cityRoute != null
-                        ? 'Estimated Trip'
-                        : 'Walking Time',
-                    startLabel: _startLocationId == gpsStartId
-                        ? 'Live GPS Location'
-                        : ((startLoc?.companyName != null &&
-                                  startLoc!.companyName!.trim().isNotEmpty)
-                              ? startLoc.companyName!
-                              : (startLoc?.label ?? 'Start Location')),
-                    endLabel:
-                        (endLoc?.companyName != null &&
-                            endLoc!.companyName!.trim().isNotEmpty)
-                        ? endLoc.companyName!
-                        : (endLoc?.label ??
-                              _selectedFeatureInfo?.label ??
-                              'Destination'),
-                    onEdit: () => setState(() => _activePanel = 'route'),
-                    onClear: _clearRoute,
-                    clearLabel: _navigationProgress != null ? 'Stop' : 'Clear',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_navigationProgress != null &&
+                          _navigationProgress!.message != null &&
+                          (_navigationProgress!.status == NavigationStatus.offRoute ||
+                              _navigationProgress!.status == NavigationStatus.wrongDirection ||
+                              _navigationProgress!.status == NavigationStatus.arrived)) ...[
+                        NavigationWarningBanner(
+                          status: _navigationProgress!.status,
+                          message: _navigationProgress!.message!,
+                          onRecalculate: _navigationProgress!.status != NavigationStatus.arrived
+                              ? () => _calculateRoute(data)
+                              : null,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      RouteInfoBar(
+                        distanceMeters:
+                            _navigationProgress?.remainingDistance ??
+                            (_cityRoute != null
+                                ? _cityRoute!.distance + _cityRoute!.walkingDistance
+                                : _currentRoute!.distance),
+                        walkingTime: _navigationProgress != null
+                            ? walkingTimeLabel(
+                                _navigationProgress!.remainingDistance,
+                              )
+                            : _cityRoute != null
+                            ? travelTimeLabel(
+                                _cityRoute!.duration + _cityRoute!.walkingDuration,
+                              )
+                            : walkingTimeLabel(_currentRoute!.distance),
+                        timeMetricLabel: _cityRoute != null
+                            ? 'Estimated Trip'
+                            : 'Walking Time',
+                        startLabel: _startLocationId == gpsStartId
+                            ? 'Live GPS Location'
+                            : ((startLoc?.companyName != null &&
+                                      startLoc!.companyName!.trim().isNotEmpty)
+                                  ? startLoc.companyName!
+                                  : (startLoc?.label ?? 'Start Location')),
+                        endLabel:
+                            (endLoc?.companyName != null &&
+                                endLoc!.companyName!.trim().isNotEmpty)
+                            ? endLoc.companyName!
+                            : (endLoc?.label ??
+                                  _selectedFeatureInfo?.label ??
+                                  'Destination'),
+                        onEdit: () => setState(() => _activePanel = 'route'),
+                        onClear: _clearRoute,
+                        clearLabel: _navigationProgress != null ? 'Stop' : 'Clear',
+                      ),
+                    ],
                   ),
                 ),
 
