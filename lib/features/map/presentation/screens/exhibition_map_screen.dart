@@ -58,6 +58,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   NavigationProgressTracker? _navigationTracker;
   NavigationProgress? _navigationProgress;
   int _navigationRoadCoordinateCount = 0;
+  DateTime? _lastAutoRerouteTime;
+  int _consecutiveOffRouteReadings = 0;
+  String? _userLocationDistrict;
   List<String> _savedIds = [];
 
   // ─── Other tab state ────────────────────────────────────────────────────────
@@ -174,6 +177,25 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         if (progress.message != null) _gpsMessage = progress.message;
       }
     });
+    if (progress?.status == NavigationStatus.offRoute) {
+      _consecutiveOffRouteReadings++;
+      final now = DateTime.now();
+      final canAutoReroute = _lastAutoRerouteTime == null ||
+          now.difference(_lastAutoRerouteTime!).inSeconds >= 8;
+
+      if (_consecutiveOffRouteReadings >= 3 && canAutoReroute) {
+        _consecutiveOffRouteReadings = 0;
+        _lastAutoRerouteTime = now;
+        setState(() {
+          _gpsMessage =
+              'Off-route detected. Recalculating route to destination...';
+        });
+        unawaited(_mapFuture.then((data) => _calculateRoute(data)));
+      }
+    } else {
+      _consecutiveOffRouteReadings = 0;
+    }
+
     if (progress?.status == NavigationStatus.arrived) {
       unawaited(_positionSubscription?.cancel());
       _positionSubscription = null;
@@ -674,7 +696,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                             ? 'Estimated Trip'
                             : 'Walking Time',
                         startLabel: _startLocationId == gpsStartId
-                            ? 'Live GPS Location'
+                            ? (_userLocationDistrict ?? 'Ilala')
                             : ((startLoc?.companyName != null &&
                                       startLoc!.companyName!.trim().isNotEmpty)
                                   ? startLoc.companyName!
@@ -1348,6 +1370,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         _gpsMessage =
             'GPS found. Connecting the road route to the fairground paths...';
       });
+      unawaited(_updateUserDistrict(position.latitude, position.longitude));
 
       final closestNode = nearestNode(userPoint, data.nodes);
       final onSite =
