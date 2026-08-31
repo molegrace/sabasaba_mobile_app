@@ -1305,9 +1305,14 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         throw Exception('GPS returned an invalid or stale location. Try again.');
       }
       if (position.accuracy > NavigationConfig.maximumAccuracy) {
-        throw Exception(
-          'GPS accuracy is too low to start navigation. Move to an open area and try again.',
-        );
+        setState(() {
+          _cityRoute = null;
+          _currentRoute = null;
+          _gpsMessage =
+              'GPS accuracy (~${position.accuracy.round()}m) is too low for navigation.';
+        });
+        unawaited(_showLowAccuracyDialog(position.accuracy));
+        return;
       }
       setState(() {
         _locationAllowed = true;
@@ -1462,11 +1467,66 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       if (!mounted || requestId != _cityRouteRequestId) return;
       unawaited(_positionSubscription?.cancel());
       _positionSubscription = null;
+      final msg = error.toString().replaceFirst('Exception: ', '');
       setState(() {
         _cityRoute = null;
         _currentRoute = null;
-        _gpsMessage = error.toString().replaceFirst('Exception: ', '');
+        _gpsMessage = msg;
       });
+      if (msg.toLowerCase().contains('accuracy') ||
+          msg.toLowerCase().contains('gps')) {
+        unawaited(_showLowAccuracyDialog(35));
+      }
+    }
+  }
+
+  Future<void> _showLowAccuracyDialog(double currentAccuracy) async {
+    final accuracyMeters =
+        currentAccuracy.isFinite && currentAccuracy > 0
+            ? currentAccuracy.round()
+            : 35;
+    final action = await showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.gps_off_rounded,
+            color: Color(0xfff59e0b),
+            size: 38,
+          ),
+          title: const Text(
+            'Low GPS Accuracy Warning',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          content: Text(
+            'Your current GPS signal accuracy is about $accuracyMeters meters, which is too low for reliable walking navigation (requires accuracy under 30 meters).\n\nPlease move to an open outdoor area with a clear sky view, or select a fixed starting point.',
+            style: const TextStyle(fontSize: 13, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('select_start'),
+              child: const Text('Select Start Point'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop('retry'),
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Retry GPS'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted) return;
+    if (action == 'select_start') {
+      setState(() {
+        _activePanel = 'route';
+        _startLocationId = '';
+      });
+    } else if (action == 'retry') {
+      final data = await _mapFuture;
+      unawaited(_calculateRoute(data));
     }
   }
 
