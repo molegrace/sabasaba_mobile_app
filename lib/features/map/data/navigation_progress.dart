@@ -13,6 +13,8 @@ enum NavigationStatus {
 
 class NavigationConfig {
   static const maximumAccuracy = 30.0;
+  static const maximumReadingAge = Duration(seconds: 30);
+  static const futureReadingTolerance = Duration(seconds: 5);
   static const offRouteDistance = 20.0;
   static const recoveryDistance = 12.0;
   static const offRouteReadings = 3;
@@ -39,6 +41,29 @@ class NavigationReading {
   final DateTime timestamp;
   final double? speed;
   final double? heading;
+}
+
+bool isNavigationReadingValid(
+  NavigationReading reading, {
+  DateTime? now,
+}) {
+  final currentTime = now ?? DateTime.now();
+  final longitude = reading.position.lng;
+  final latitude = reading.position.lat;
+  return longitude.isFinite &&
+      latitude.isFinite &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      reading.accuracy.isFinite &&
+      reading.accuracy >= 0 &&
+      reading.timestamp.isAfter(
+        currentTime.subtract(NavigationConfig.maximumReadingAge),
+      ) &&
+      reading.timestamp.isBefore(
+        currentTime.add(NavigationConfig.futureReadingTolerance),
+      );
 }
 
 class RouteMatch {

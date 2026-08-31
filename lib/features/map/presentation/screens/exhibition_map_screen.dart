@@ -147,16 +147,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
   void _handleLivePosition(Position position) {
     final point = GeoPoint(position.longitude, position.latitude);
-    final tracker = _navigationTracker;
-    final progress = tracker?.update(
-      NavigationReading(
-        position: point,
-        accuracy: position.accuracy,
-        timestamp: position.timestamp,
-        speed: position.speed,
-        heading: position.heading,
-      ),
+    final reading = NavigationReading(
+      position: point,
+      accuracy: position.accuracy,
+      timestamp: position.timestamp,
+      speed: position.speed,
+      heading: position.heading,
     );
+    if (!isNavigationReadingValid(reading)) return;
+    final tracker = _navigationTracker;
+    final progress = tracker?.update(reading);
     setState(() {
       _locationAllowed = true;
       _userLocation = point;
@@ -1241,6 +1241,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
   Future<void> _navigateFromGpsToDestination(ExhibitionMapData data) async {
     final requestId = ++_cityRouteRequestId;
+    unawaited(_positionSubscription?.cancel());
+    _positionSubscription = null;
     final destination = _findLocation(data.locations, _endLocationId, data);
     if (destination == null) {
       setState(
@@ -1292,6 +1294,21 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       if (!mounted || requestId != _cityRouteRequestId) return;
 
       final userPoint = GeoPoint(position.longitude, position.latitude);
+      final initialReading = NavigationReading(
+        position: userPoint,
+        accuracy: position.accuracy,
+        timestamp: position.timestamp,
+        speed: position.speed,
+        heading: position.heading,
+      );
+      if (!isNavigationReadingValid(initialReading)) {
+        throw Exception('GPS returned an invalid or stale location. Try again.');
+      }
+      if (position.accuracy > NavigationConfig.maximumAccuracy) {
+        throw Exception(
+          'GPS accuracy is too low to start navigation. Move to an open area and try again.',
+        );
+      }
       setState(() {
         _locationAllowed = true;
         _userLocation = userPoint;
@@ -1299,7 +1316,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         _gpsMessage =
             'GPS found. Connecting the road route to the fairground paths...';
       });
-      _startLiveLocationStream();
 
       final closestNode = nearestNode(userPoint, data.nodes);
       final onSite =
@@ -1311,12 +1327,22 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       final gateLocation = data.locations.where((location) {
         return location.label.trim().toLowerCase() == 'gate 1';
       }).firstOrNull;
+      final endNode = _resolveDestinationNode(destination, data);
+      final validOnSiteNodeIds = nodeIdsThatCanReach(endNode.id, data.edges);
+      final validOnSiteNodes = data.nodes
+          .where((node) => validOnSiteNodeIds.contains(node.id))
+          .toList();
+      final closestValidOnSiteNode = validOnSiteNodes.isEmpty
+          ? null
+          : nearestNode(userPoint, validOnSiteNodes);
       final startNodeId = onSite
-          ? closestNode.id
+          ? closestValidOnSiteNode?.id
           : gateLocation != null && gateLocation.nodeId != 'no_node'
           ? gateLocation.nodeId
           : nearestNode(_sabasabaGate, data.nodes).id;
-      final endNode = _resolveDestinationNode(destination, data);
+      if (startNodeId == null) {
+        throw Exception('No nearby mapped path can reach this destination.');
+      }
       final routeResult = findNavigableRoute(
         startNodeId,
         endNode.id,
@@ -1410,15 +1436,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         );
       }
       final navigationTracker = NavigationProgressTracker(completeCoordinates);
-      final initialProgress = navigationTracker.update(
-        NavigationReading(
-          position: userPoint,
-          accuracy: position.accuracy,
-          timestamp: position.timestamp,
-          speed: position.speed,
-          heading: position.heading,
-        ),
-      );
+      final initialProgress = navigationTracker.update(initialReading);
 
       setState(() {
         _cityRoute = cityRoute;
@@ -1431,6 +1449,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
         _mapRotation = 0;
         _activePanel = null;
       });
+      _startLiveLocationStream();
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted &&
@@ -1441,6 +1460,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       });
     } catch (error) {
       if (!mounted || requestId != _cityRouteRequestId) return;
+      unawaited(_positionSubscription?.cancel());
+      _positionSubscription = null;
       setState(() {
         _cityRoute = null;
         _currentRoute = null;

@@ -196,6 +196,21 @@ Set<String> reachableNodeIds(String startId, List<RoutingEdge> edges) {
   return reachable;
 }
 
+Set<String> nodeIdsThatCanReach(String endId, List<RoutingEdge> edges) {
+  final reversedEdges = edges
+      .map(
+        (edge) => RoutingEdge(
+          id: edge.id,
+          sourceNodeId: edge.targetNodeId,
+          targetNodeId: edge.sourceNodeId,
+          distance: edge.distance,
+          bidirectional: edge.bidirectional,
+        ),
+      )
+      .toList();
+  return reachableNodeIds(endId, reversedEdges);
+}
+
 bool _pointIsOnSegment(GeoPoint point, GeoPoint start, GeoPoint end) {
   const epsilon = 1e-12;
   final segmentLng = end.lng - start.lng;
@@ -397,107 +412,15 @@ RouteResult? shortestPath(
   return RouteResult(nodeIds: nodeIds, distance: distance);
 }
 
-/// Finds a mapped route. When the destination is in a disconnected road
-/// section, returns only the existing-road path that gets closest to it.
+/// Finds a complete mapped route. Disconnected destinations return null so the
+/// caller can show an error instead of presenting a partial route as complete.
 RouteResult? findNavigableRoute(
   String startId,
   String endId,
-  List<RoutingNode> nodes,
+  List<RoutingNode> _nodes,
   List<RoutingEdge> edges,
 ) {
-  final connected = shortestPath(startId, endId, edges);
-  if (connected != null) return connected;
-
-  final nodeById = {for (final n in nodes) n.id: n};
-  final destinationNode = nodeById[endId];
-  if (!nodeById.containsKey(startId) || destinationNode == null) return null;
-
-  double distanceBetween(RoutingNode left, RoutingNode right) {
-    const earthRadiusMeters = 6371000.0;
-    double toRadians(double deg) => (deg * math.pi) / 180.0;
-    final latDelta = toRadians(right.latitude - left.latitude);
-    final lngDelta = toRadians(right.longitude - left.longitude);
-    final leftLat = toRadians(left.latitude);
-    final rightLat = toRadians(right.latitude);
-    final haversine =
-        math.sin(latDelta / 2) * math.sin(latDelta / 2) +
-        math.cos(leftLat) *
-            math.cos(rightLat) *
-            math.sin(lngDelta / 2) *
-            math.sin(lngDelta / 2);
-    final bounded = math.min(1.0, math.max(0.0, haversine));
-    return earthRadiusMeters *
-        2 *
-        math.atan2(math.sqrt(bounded), math.sqrt(1.0 - bounded));
-  }
-
-  if (edges.isEmpty) return null;
-  final graph = <String, List<MapEntry<String, double>>>{};
-  void connect(String source, String target, double dist) {
-    graph.putIfAbsent(source, () => []).add(MapEntry(target, dist));
-  }
-
-  for (final edge in edges) {
-    final src = edge.sourceNodeId;
-    final dst = edge.targetNodeId;
-    if (src == null || dst == null) continue;
-    connect(src, dst, edge.distance);
-    if (edge.bidirectional) connect(dst, src, edge.distance);
-  }
-
-  final distances = <String, double>{startId: 0.0};
-  final previous = <String, String>{};
-  final pending = <String>{startId};
-
-  while (pending.isNotEmpty) {
-    String? current;
-    var currentDistance = double.infinity;
-    for (final nid in pending) {
-      final d = distances[nid] ?? double.infinity;
-      if (d < currentDistance) {
-        current = nid;
-        currentDistance = d;
-      }
-    }
-    if (current == null) break;
-    pending.remove(current);
-
-    for (final neighbor in graph[current] ?? const []) {
-      final neighborId = neighbor.key;
-      final neighborDist = neighbor.value;
-      final nextDist = currentDistance + neighborDist;
-      if (nextDist < (distances[neighborId] ?? double.infinity)) {
-        distances[neighborId] = nextDist;
-        previous[neighborId] = current;
-        pending.add(neighborId);
-      }
-    }
-  }
-
-  String closestReachableId = startId;
-  var closestDistance = double.infinity;
-
-  for (final reachableId in distances.keys) {
-    final reachableNode = nodeById[reachableId];
-    if (reachableNode == null) continue;
-    final destDist = distanceBetween(reachableNode, destinationNode);
-    if (destDist < closestDistance) {
-      closestReachableId = reachableId;
-      closestDistance = destDist;
-    }
-  }
-
-  final dist = distances[closestReachableId];
-  if (dist == null) return null;
-
-  final nodeIds = <String>[closestReachableId];
-  while (nodeIds.first != startId) {
-    final predecessor = previous[nodeIds.first];
-    if (predecessor == null) return null;
-    nodeIds.insert(0, predecessor);
-  }
-
-  return RouteResult(nodeIds: nodeIds, distance: dist);
+  return shortestPath(startId, endId, edges);
 }
 
 /// Returns walking time label for a distance in meters.

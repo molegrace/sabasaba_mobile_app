@@ -17,6 +17,31 @@ void main() {
     );
   }
 
+  test('validates current readings and rejects invalid or stale GPS data', () {
+    final now = DateTime.fromMillisecondsSinceEpoch(100000);
+    final current = NavigationReading(
+      position: const GeoPoint(39.27, -6.86),
+      accuracy: 4,
+      timestamp: now,
+      speed: 1,
+      heading: 90,
+    );
+    final stale = NavigationReading(
+      position: const GeoPoint(39.27, -6.86),
+      accuracy: 4,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(1),
+    );
+    final invalid = NavigationReading(
+      position: const GeoPoint(double.nan, -6.86),
+      accuracy: 4,
+      timestamp: now,
+    );
+
+    expect(isNavigationReadingValid(current, now: now), isTrue);
+    expect(isNavigationReadingValid(stale, now: now), isFalse);
+    expect(isNavigationReadingValid(invalid, now: now), isFalse);
+  });
+
   test('projects onto and trims the route', () {
     final match = matchPositionToRoute(
       const GeoPoint(39.2705, -6.86001),
