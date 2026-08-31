@@ -62,6 +62,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
   // ─── Other tab state ────────────────────────────────────────────────────────
   int _selectedNavIndex = 2; // default to map (index 2)
+  int _unreadAnnouncementCount = 0;
   bool _exhibitorRegisterMode = false;
   bool _locationAllowed = false;
   GeoPoint? _userLocation;
@@ -91,6 +92,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   void initState() {
     super.initState();
     _loadSavedIds();
+    _checkUnreadAnnouncements();
     _mapAnimationController =
         AnimationController(
           vsync: this,
@@ -106,6 +108,15 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       _monitorConnectivity();
     }
     _boothNameController.text = _boothName;
+  }
+
+  Future<void> _checkUnreadAnnouncements() async {
+    final announcements = await VisitorAnnouncementManager.fetchAnnouncements();
+    if (mounted) {
+      setState(() {
+        _unreadAnnouncementCount = announcements.where((a) => !a.isRead).length;
+      });
+    }
   }
 
   Future<void> _loadSavedIds() async {
@@ -194,18 +205,30 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
               onDestinationSelected: (index) {
                 setState(() => _selectedNavIndex = index);
               },
-              destinations: const [
-                NavigationDestination(
+              destinations: [
+                const NavigationDestination(
                   icon: Icon(Icons.storefront_outlined),
                   selectedIcon: Icon(Icons.storefront),
                   label: 'Services',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.info_outline),
-                  selectedIcon: Icon(Icons.info),
+                  icon: _unreadAnnouncementCount > 0
+                      ? Badge(
+                          label: Text('$_unreadAnnouncementCount'),
+                          backgroundColor: const Color(0xffef4444),
+                          child: const Icon(Icons.info_outline),
+                        )
+                      : const Icon(Icons.info_outline),
+                  selectedIcon: _unreadAnnouncementCount > 0
+                      ? Badge(
+                          label: Text('$_unreadAnnouncementCount'),
+                          backgroundColor: const Color(0xffef4444),
+                          child: const Icon(Icons.info),
+                        )
+                      : const Icon(Icons.info),
                   label: 'Info',
                 ),
-                NavigationDestination(
+                const NavigationDestination(
                   icon: Icon(Icons.map_outlined),
                   selectedIcon: Icon(Icons.map),
                   label: 'Navigator',
@@ -265,9 +288,14 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                 if (_selectedNavIndex == 1) {
                   return InfoTab(
                     buildingCount: data.buildings.length,
-                    roadCount: data.roads.length,
-                    treeCount: data.trees.length,
+                    locations: data.locations,
                     exhibition: data.exhibition,
+                    onUnreadCountChanged: (count) {
+                      if (mounted && _unreadAnnouncementCount != count) {
+                        setState(() => _unreadAnnouncementCount = count);
+                      }
+                    },
+                    onSelectLocation: (loc) => _selectLocation(loc, data),
                   );
                 }
 
@@ -622,14 +650,35 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                         : 'Walking Time',
                     startLabel: _startLocationId == gpsStartId
                         ? 'Live GPS Location'
-                        : (startLoc?.label ?? 'Start Location'),
-                    endLabel:
-                        endLoc?.label ??
-                        _selectedFeatureInfo?.label ??
-                        'Destination',
+                        : ((startLoc?.companyName != null &&
+                                startLoc!.companyName!.trim().isNotEmpty)
+                            ? startLoc.companyName!
+                            : (startLoc?.label ?? 'Start Location')),
+                    endLabel: (endLoc?.companyName != null &&
+                            endLoc!.companyName!.trim().isNotEmpty)
+                        ? endLoc.companyName!
+                        : (endLoc?.label ??
+                            _selectedFeatureInfo?.label ??
+                            'Destination'),
                     onEdit: () => setState(() => _activePanel = 'route'),
                     onClear: _clearRoute,
                     clearLabel: _navigationProgress != null ? 'Stop' : 'Clear',
+                  ),
+                ),
+
+              if (_selectedService != null && _currentRoute == null)
+                Positioned(
+                  bottom: 16,
+                  left: isDesktop && _activePanel != null ? 416 : 12,
+                  right: isDesktop ? null : 12,
+                  width: isDesktop ? 380 : null,
+                  child: _FacilityPointersBar(
+                    service: _selectedService!,
+                    onClear: () {
+                      setState(() {
+                        _selectedService = null;
+                      });
+                    },
                   ),
                 ),
 
@@ -1160,9 +1209,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       return;
     }
 
+    final endNode = _resolveDestinationNode(end, data);
     final result = findNavigableRoute(
       start.nodeId,
-      end.nodeId,
+      endNode.id,
       data.nodes,
       data.edges,
     );
@@ -1864,35 +1914,68 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   }
 
   Future<void> _openService(VisitorService service) async {
-    if (!_locationAllowed) {
-      final allowed = await showDialog<bool>(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Allow location access?'),
-            content: Text(
-              'SabaSaba needs your device location to show directions to ${service.title}.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Not now'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Allow'),
-              ),
-            ],
-          );
-        },
-      );
-      if (allowed != true || !mounted) return;
-      _locationAllowed = true;
-    }
+    final data = await _mapFuture;
+    final facilityPoints = VisitorService.resolveFacilityPoints(
+      service,
+      data.buildings,
+    );
+
     setState(() {
       _selectedService = service;
-      _selectedNavIndex = 0;
+      _selectedNavIndex = 2; // Switch to Navigator (Map view)
+      _activePanel = null;
     });
+
+    if (facilityPoints.isNotEmpty && mounted) {
+      _fitGeoPointsToScreen(
+        data,
+        facilityPoints.map((fp) => fp.position).toList(),
+      );
+    }
+  }
+
+  void _fitGeoPointsToScreen(ExhibitionMapData data, List<GeoPoint> geoPoints) {
+    final renderBox =
+        _mapViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize || geoPoints.isEmpty) return;
+
+    final size = renderBox.size;
+    final projection = data.projectionFor(size);
+    final points = geoPoints.map((p) => projection.project(p)).toList();
+
+    final left = points.map((p) => p.dx).reduce(math.min);
+    final right = points.map((p) => p.dx).reduce(math.max);
+    final top = points.map((p) => p.dy).reduce(math.min);
+    final bottom = points.map((p) => p.dy).reduce(math.max);
+    const padding = 70.0;
+    final areaWidth = math.max(1.0, right - left);
+    final areaHeight = math.max(1.0, bottom - top);
+    final scale = math
+        .min(
+          (size.width - padding * 2) / areaWidth,
+          (size.height - padding * 2) / areaHeight,
+        )
+        .clamp(minMapScale, maxMapScale);
+    final center = Offset((left + right) / 2, (top + bottom) / 2);
+    final target = Matrix4.identity()
+      ..translate(
+        size.width / 2 - center.dx * scale,
+        size.height / 2 - center.dy * scale,
+      )
+      ..scale(scale);
+
+    _mapAnimationController.stop();
+    _mapAnimation =
+        Matrix4Tween(
+          begin: _transformController.value.clone(),
+          end: target,
+        ).animate(
+          CurvedAnimation(
+            parent: _mapAnimationController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
+    _mapAnimationController.forward(from: 0);
   }
 
   Future<void> _monitorConnectivity() async {
@@ -1920,5 +2003,83 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     _connectionBannerTimer = Timer(const Duration(seconds: 5), () {
       if (mounted) setState(() => _showConnectionBanner = false);
     });
+  }
+}
+
+class _FacilityPointersBar extends StatelessWidget {
+  const _FacilityPointersBar({
+    required this.service,
+    required this.onClear,
+  });
+
+  final VisitorService service;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xff0b4238),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: const Color(0xff0284c7),
+            child: Icon(service.icon, size: 18, color: Colors.white),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${service.title} Map Pointers',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Showing location pointers across the grounds',
+                  style: TextStyle(
+                    color: Color(0xffbae6fd),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: onClear,
+            icon: const Icon(Icons.close_rounded, size: 16),
+            label: const Text('Clear'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xffef4444),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              visualDensity: VisualDensity.compact,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

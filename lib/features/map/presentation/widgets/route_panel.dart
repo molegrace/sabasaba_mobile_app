@@ -272,10 +272,14 @@ class _RouteDropdown extends StatelessWidget {
                 ),
               ),
             ...locations.map((loc) {
+              final displayName =
+                  (loc.companyName != null && loc.companyName!.trim().isNotEmpty)
+                      ? loc.companyName!
+                      : loc.label;
               return DropdownMenuItem<String>(
                 value: loc.id,
                 child: Text(
-                  '${loc.label} — ${loc.description}',
+                  displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 13),

@@ -32,6 +32,7 @@ part 'features/map/presentation/widgets/right_toolbar.dart';
 
 part 'features/services/presentation/services_tab.dart';
 part 'features/info/presentation/info_tab.dart';
+part 'features/info/models/visitor_announcement.dart';
 part 'features/exhibitor/presentation/exhibitor_tab.dart';
 part 'features/profile/presentation/you_tab.dart';
 part 'core/widgets/map_controls.dart';

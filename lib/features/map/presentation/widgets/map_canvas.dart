@@ -412,7 +412,7 @@ class ExhibitionMapPainter extends CustomPainter {
 
     final service = selectedService;
     if (service != null) {
-      _drawServiceMarker(canvas, service, projection);
+      _drawServiceMarkers(canvas, service, projection, currentScale);
     }
 
     final liveLocation = userLocation;
@@ -508,49 +508,39 @@ class ExhibitionMapPainter extends CustomPainter {
         userLocationAccuracy != oldDelegate.userLocationAccuracy;
   }
 
-  void _drawServiceMarker(
+  void _drawServiceMarkers(
     Canvas canvas,
     VisitorService service,
     MapProjection projection,
+    double currentScale,
   ) {
-    final point = projection.project(service.area.center);
-    final shadowPaint = Paint()..color = const Color(0x44000000);
-    final markerPaint = Paint()..color = const Color(0xfff26430);
-    final centerPaint = Paint()..color = Colors.white;
-    final labelPaint = Paint()..color = const Color(0xff0b4238);
-
-    final markerPath = Path()
-      ..addOval(Rect.fromCircle(center: point.translate(0, -12), radius: 14))
-      ..moveTo(point.dx - 7, point.dy - 1)
-      ..lineTo(point.dx, point.dy + 12)
-      ..lineTo(point.dx + 7, point.dy - 1)
-      ..close();
-    canvas.drawCircle(point.translate(2, 3), 16, shadowPaint);
-    canvas.drawPath(markerPath, markerPaint);
-    canvas.drawCircle(point.translate(0, -12), 6, centerPaint);
-
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: service.title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w900,
-          fontSize: 12,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: 150);
-    final labelRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        point.dx - textPainter.width / 2 - 10,
-        point.dy + 18,
-        textPainter.width + 20,
-        textPainter.height + 10,
-      ),
-      const Radius.circular(8),
+    final facilityPoints = VisitorService.resolveFacilityPoints(
+      service,
+      data.buildings,
     );
-    canvas.drawRRect(labelRect, labelPaint);
-    textPainter.paint(canvas, Offset(labelRect.left + 10, labelRect.top + 5));
+
+    final rOuter = 7.5 / currentScale;
+    final rInner = 3.5 / currentScale;
+    final shadowOffset = 1.5 / currentScale;
+
+    final shadowPaint = Paint()..color = const Color(0x44000000);
+    final pinPaint = Paint()..color = const Color(0xff0284c7);
+    final borderPaint = Paint()..color = Colors.white;
+    final innerPaint = Paint()..color = Colors.white;
+
+    for (final fp in facilityPoints) {
+      final point = projection.project(fp.position);
+
+      canvas.drawCircle(
+        point.translate(shadowOffset, shadowOffset),
+        rOuter + (1.0 / currentScale),
+        shadowPaint,
+      );
+
+      canvas.drawCircle(point, rOuter + (1.5 / currentScale), borderPaint);
+      canvas.drawCircle(point, rOuter, pinPaint);
+      canvas.drawCircle(point, rInner, innerPaint);
+    }
   }
 
   void _drawRoundabouts(Canvas canvas, MapProjection projection) {
