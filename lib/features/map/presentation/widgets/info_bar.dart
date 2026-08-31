@@ -5,6 +5,7 @@ part of '../../../../main.dart';
 /// and Edit/Clear buttons.
 class RouteInfoBar extends StatelessWidget {
   const RouteInfoBar({
+    super.key,
     required this.distanceMeters,
     required this.walkingTime,
     this.timeMetricLabel = 'Walking Time',
@@ -13,6 +14,9 @@ class RouteInfoBar extends StatelessWidget {
     required this.onEdit,
     required this.onClear,
     this.clearLabel = 'Clear',
+    this.carTime,
+    this.motorcycleTime,
+    this.pedestrianTime,
   });
 
   final double distanceMeters;
@@ -23,6 +27,9 @@ class RouteInfoBar extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onClear;
   final String clearLabel;
+  final String? carTime;
+  final String? motorcycleTime;
+  final String? pedestrianTime;
 
   @override
   Widget build(BuildContext context) {
@@ -124,28 +131,101 @@ class RouteInfoBar extends StatelessWidget {
             const SizedBox(height: 10),
           ],
 
-          // Distance + walking time grid
-          Row(
-            children: [
-              Expanded(
-                child: _InfoMetric(
-                  label: 'Distance',
-                  value: distanceMeters >= 1000
-                      ? '${(distanceMeters / 1000).toStringAsFixed(1)} km'
-                      : '${distanceMeters.round()} m',
+          // Distance + Travel modes grid
+          if (carTime != null && motorcycleTime != null && pedestrianTime != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xfff8fafc),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xfff1f5f9)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total Distance',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xff64748b),
+                        ),
+                      ),
+                      Text(
+                        distanceMeters >= 1000
+                            ? '${(distanceMeters / 1000).toStringAsFixed(1)} km'
+                            : '${distanceMeters.round()} m',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xff0f172a),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ModeMetricPill(
+                          icon: Icons.directions_car_rounded,
+                          iconColor: const Color(0xff0284c7),
+                          bgColor: const Color(0xffe0f2fe),
+                          label: 'Car',
+                          time: carTime!,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: _ModeMetricPill(
+                          icon: Icons.two_wheeler_rounded,
+                          iconColor: const Color(0xffd97706),
+                          bgColor: const Color(0xfffef3c7),
+                          label: 'Motorcycle',
+                          time: motorcycleTime!,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: _ModeMetricPill(
+                          icon: Icons.directions_walk_rounded,
+                          iconColor: const Color(0xff16a34a),
+                          bgColor: const Color(0xffdcfce7),
+                          label: 'Pedestrian',
+                          time: pedestrianTime!,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _InfoMetric(
+                    label: 'Distance',
+                    value: distanceMeters >= 1000
+                        ? '${(distanceMeters / 1000).toStringAsFixed(1)} km'
+                        : '${distanceMeters.round()} m',
+                  ),
                 ),
-              ),
-              Container(
-                width: 1,
-                height: 32,
-                color: Colors.grey.shade200,
-                margin: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              Expanded(
-                child: _InfoMetric(label: timeMetricLabel, value: walkingTime),
-              ),
-            ],
-          ),
+                Container(
+                  width: 1,
+                  height: 32,
+                  color: Colors.grey.shade200,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                Expanded(
+                  child: _InfoMetric(label: timeMetricLabel, value: walkingTime),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -304,6 +384,76 @@ class _InfoMetric extends StatelessWidget {
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: Color(0xff1e293b),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeMetricPill extends StatelessWidget {
+  const _ModeMetricPill({
+    required this.icon,
+    required this.iconColor,
+    required this.bgColor,
+    required this.label,
+    required this.time,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final Color bgColor;
+  final String label;
+  final String time;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xffe2e8f0)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(icon, size: 13, color: iconColor),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xff64748b),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  time,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xff0f172a),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ],

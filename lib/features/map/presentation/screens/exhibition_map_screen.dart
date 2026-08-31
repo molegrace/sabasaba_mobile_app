@@ -723,6 +723,23 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                             : (endLoc?.label ??
                                   _selectedFeatureInfo?.label ??
                                   'Destination'),
+                        carTime: _cityRoute != null
+                            ? travelTimeLabel(
+                                _cityRoute!.duration + _cityRoute!.walkingDuration,
+                              )
+                            : null,
+                        motorcycleTime: _cityRoute != null
+                            ? travelTimeLabel(
+                                (_cityRoute!.duration * 0.7) +
+                                    _cityRoute!.walkingDuration,
+                              )
+                            : null,
+                        pedestrianTime: _cityRoute != null
+                            ? travelTimeLabel(
+                                (_cityRoute!.distance / 1.25) +
+                                    _cityRoute!.walkingDuration,
+                              )
+                            : null,
                         onEdit: () => setState(() => _activePanel = 'route'),
                         onClear: _clearRoute,
                         clearLabel: _navigationProgress != null ? 'Stop' : 'Clear',
