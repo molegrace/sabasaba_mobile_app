@@ -252,9 +252,14 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                 // ── Non-map tabs ──────────────────────────────────────────────
                 if (_selectedNavIndex == 0) {
                   return ServicesTab(
+                    locations: data.locations,
                     areas: data.buildings,
                     selectedService: _selectedService,
                     onSelectService: _openService,
+                    onSelectExhibitor: (loc) =>
+                        _selectExhibitorFromServices(loc, data),
+                    onNavigateToExhibitor: (loc) =>
+                        _navigateToExhibitorFromServices(loc, data),
                   );
                 }
                 if (_selectedNavIndex == 1) {
@@ -961,6 +966,73 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       _endLocationId = loc.id;
     });
 
+    _calculateRoute(data);
+  }
+
+  void _selectExhibitorFromServices(
+    RoutingLocation loc,
+    ExhibitionMapData data,
+  ) {
+    final mapFeature = data.buildings
+        .where(
+          (b) =>
+              b.featureId == loc.id ||
+              b.key == loc.id ||
+              (loc.featureId != null && b.featureId == loc.featureId),
+        )
+        .firstOrNull;
+
+    setState(() {
+      _selectedNavIndex = 2; // Switch bottom nav to Navigator (map view)
+      _activePanel = 'details';
+      if (mapFeature != null) {
+        _selectedAreaForCanvas = mapFeature;
+      }
+      _selectedFeatureInfo = SelectedFeatureInfo(
+        id: loc.id,
+        label: loc.label,
+        layerName: loc.layerName,
+        companyName: loc.companyName,
+        properties: loc.properties,
+        location: loc,
+      );
+    });
+
+    _focusLocation(loc, data);
+  }
+
+  void _navigateToExhibitorFromServices(
+    RoutingLocation loc,
+    ExhibitionMapData data,
+  ) {
+    final mapFeature = data.buildings
+        .where(
+          (b) =>
+              b.featureId == loc.id ||
+              b.key == loc.id ||
+              (loc.featureId != null && b.featureId == loc.featureId),
+        )
+        .firstOrNull;
+
+    setState(() {
+      _selectedNavIndex = 2; // Switch bottom nav to Navigator (map view)
+      _activePanel = 'route';
+      if (mapFeature != null) {
+        _selectedAreaForCanvas = mapFeature;
+      }
+      _selectedFeatureInfo = SelectedFeatureInfo(
+        id: loc.id,
+        label: loc.label,
+        layerName: loc.layerName,
+        companyName: loc.companyName,
+        properties: loc.properties,
+        location: loc,
+      );
+      _startLocationId = gpsStartId;
+      _endLocationId = loc.id;
+    });
+
+    _focusLocation(loc, data);
     _calculateRoute(data);
   }
 
