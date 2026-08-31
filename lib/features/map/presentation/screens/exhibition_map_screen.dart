@@ -433,7 +433,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       final matchesSearch =
           q.isEmpty ||
           loc.label.toLowerCase().contains(q) ||
-          loc.description.toLowerCase().contains(q) ||
           (loc.companyName?.toLowerCase().contains(q) ?? false) ||
           (loc.industry?.toLowerCase().contains(q) ?? false) ||
           (loc.industries?.any((item) => item.toLowerCase().contains(q)) ??
