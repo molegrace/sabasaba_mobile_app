@@ -484,14 +484,11 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
             SearchSuggestionItem(
               id: loc.id,
               title: isExhibitor ? loc.companyName! : loc.label,
-              subtitle: isExhibitor
-                  ? '${loc.label} • ${loc.description}'
-                  : loc.description,
+              subtitle: isExhibitor ? loc.label : null,
               type: isExhibitor
                   ? 'exhibitor'
                   : (loc.layerName.contains('Hall') ? 'hall' : 'booth'),
-              badge: isExhibitor ? 'Company' : loc.layerName,
-
+              badge: null,
               onSelect: () => _selectLocationFromSearch(loc, data),
             ),
           );
@@ -507,10 +504,9 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                 SearchSuggestionItem(
                   id: '${loc.id}_${offering.id ?? oTitle}',
                   title: oTitle.isNotEmpty ? oTitle : loc.label,
-                  subtitle:
-                      '${loc.companyName ?? loc.label} • ${offering.priceText ?? offering.type ?? 'Offering'}',
+                  subtitle: loc.companyName ?? loc.label,
                   type: offering.type == 'service' ? 'service' : 'product',
-                  badge: offering.type ?? 'Product',
+                  badge: null,
                   onSelect: () => _selectLocationFromSearch(loc, data),
                 ),
               );
@@ -1578,6 +1574,55 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       final data = await _mapFuture;
       unawaited(_calculateRoute(data));
     }
+  }
+
+  Future<void> _updateUserDistrict(double lat, double lng) async {
+    final district = await _detectDistrict(lat, lng);
+    if (mounted && district.isNotEmpty) {
+      setState(() {
+        _userLocationDistrict = district;
+      });
+    }
+  }
+
+  Future<String> _detectDistrict(double lat, double lng) async {
+    if (lat >= -6.872 && lat <= -6.858 && lng >= 39.270 && lng <= 39.285) {
+      return 'Temeke (Sabasaba)';
+    }
+
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+        'format': 'json',
+        'lat': lat.toString(),
+        'lon': lng.toString(),
+        'zoom': '14',
+      });
+      final response = await http
+          .get(uri, headers: {'User-Agent': 'SabaSabaApp/1.0'})
+          .timeout(const Duration(seconds: 3));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic> && data['address'] is Map) {
+          final address = data['address'] as Map<String, dynamic>;
+          final suburb = address['suburb'] ?? address['neighbourhood'];
+          final district = address['district'] ??
+              address['city_district'] ??
+              address['county'] ??
+              address['town'] ??
+              address['city'];
+          if (suburb != null) return suburb.toString();
+          if (district != null) return district.toString();
+        }
+      }
+    } catch (_) {}
+
+    if (lat > -6.84 && lat < -6.74 && lng > 39.18 && lng < 39.28) return 'Kinondoni';
+    if (lat > -6.86 && lat < -6.75 && lng > 39.05 && lng < 39.22) return 'Ubungo';
+    if (lat > -6.87 && lat < -6.80 && lng > 39.20 && lng < 39.29) return 'Ilala';
+    if (lat > -6.98 && lat < -6.81 && lng > 39.24 && lng < 39.36) return 'Temeke';
+    if (lat > -6.98 && lat < -6.80 && lng >= 39.30) return 'Kigamboni';
+
+    return 'Ilala';
   }
 
   Future<void> _openTurnByTurnNavigation() async {
