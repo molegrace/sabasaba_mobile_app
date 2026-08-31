@@ -170,6 +170,162 @@ RoutingNode nearestNode(GeoPoint position, List<RoutingNode> nodes) {
   return nearest;
 }
 
+Set<String> reachableNodeIds(String startId, List<RoutingEdge> edges) {
+  final graph = <String, List<String>>{};
+
+  void connect(String source, String target) {
+    graph.putIfAbsent(source, () => []).add(target);
+  }
+
+  for (final edge in edges) {
+    final source = edge.sourceNodeId;
+    final target = edge.targetNodeId;
+    if (source == null || target == null) continue;
+    connect(source, target);
+    if (edge.bidirectional) connect(target, source);
+  }
+
+  final reachable = <String>{startId};
+  final pending = <String>[startId];
+  while (pending.isNotEmpty) {
+    final current = pending.removeLast();
+    for (final neighbor in graph[current] ?? const <String>[]) {
+      if (reachable.add(neighbor)) pending.add(neighbor);
+    }
+  }
+  return reachable;
+}
+
+bool _pointIsOnSegment(GeoPoint point, GeoPoint start, GeoPoint end) {
+  const epsilon = 1e-12;
+  final segmentLng = end.lng - start.lng;
+  final segmentLat = end.lat - start.lat;
+  final squaredLength = segmentLng * segmentLng + segmentLat * segmentLat;
+  if (squaredLength <= epsilon * epsilon) {
+    final lngDelta = point.lng - start.lng;
+    final latDelta = point.lat - start.lat;
+    return lngDelta * lngDelta + latDelta * latDelta <= epsilon * epsilon;
+  }
+
+  final cross =
+      (point.lng - start.lng) * segmentLat -
+      (point.lat - start.lat) * segmentLng;
+  if (cross.abs() > epsilon) return false;
+
+  final dot =
+      (point.lng - start.lng) * segmentLng +
+      (point.lat - start.lat) * segmentLat;
+  return dot >= -epsilon && dot <= squaredLength + epsilon;
+}
+
+bool _pointIsStrictlyInsidePolygon(GeoPoint point, List<GeoPoint> polygon) {
+  if (polygon.length < 3) return false;
+  var inside = false;
+  var previous = polygon.length - 1;
+
+  for (var index = 0; index < polygon.length; index++) {
+    final start = polygon[previous];
+    final end = polygon[index];
+    if (_pointIsOnSegment(point, start, end)) return false;
+
+    final intersects =
+        (start.lat > point.lat) != (end.lat > point.lat) &&
+        point.lng <
+            (end.lng - start.lng) *
+                    (point.lat - start.lat) /
+                    (end.lat - start.lat) +
+                start.lng;
+    if (intersects) inside = !inside;
+    previous = index;
+  }
+
+  return inside;
+}
+
+bool isPositionStrictlyInsideHall(
+  GeoPoint point,
+  List<List<GeoPoint>> hallPolygons,
+) {
+  return hallPolygons.any(
+    (polygon) => _pointIsStrictlyInsidePolygon(point, polygon),
+  );
+}
+
+double _distanceToSegmentMeters(GeoPoint point, GeoPoint start, GeoPoint end) {
+  const metersPerDegreeLatitude = 111320.0;
+  final referenceLatitude =
+      ((point.lat + start.lat + end.lat) / 3) * math.pi / 180;
+  final longitudeScale = metersPerDegreeLatitude * math.cos(referenceLatitude);
+  const latitudeScale = metersPerDegreeLatitude;
+  final startX = (start.lng - point.lng) * longitudeScale;
+  final startY = (start.lat - point.lat) * latitudeScale;
+  final endX = (end.lng - point.lng) * longitudeScale;
+  final endY = (end.lat - point.lat) * latitudeScale;
+  final segmentX = endX - startX;
+  final segmentY = endY - startY;
+  final squaredLength = segmentX * segmentX + segmentY * segmentY;
+  if (squaredLength == 0) return math.sqrt(startX * startX + startY * startY);
+
+  final fraction = (-(startX * segmentX + startY * segmentY) / squaredLength)
+      .clamp(0.0, 1.0);
+  final projectedX = startX + fraction * segmentX;
+  final projectedY = startY + fraction * segmentY;
+  return math.sqrt(projectedX * projectedX + projectedY * projectedY);
+}
+
+double _distanceToHallBoundary(
+  GeoPoint point,
+  List<List<GeoPoint>> hallPolygons,
+) {
+  var shortestDistance = double.infinity;
+  for (final polygon in hallPolygons) {
+    if (polygon.length < 2) continue;
+    for (var index = 0; index < polygon.length; index++) {
+      final distance = _distanceToSegmentMeters(
+        point,
+        polygon[index],
+        polygon[(index + 1) % polygon.length],
+      );
+      if (distance < shortestDistance) shortestDistance = distance;
+    }
+  }
+  return shortestDistance;
+}
+
+RoutingNode? findHallExteriorApproachNode(
+  MapFeature hall,
+  List<RoutingNode> nodes,
+) {
+  if (hall.polygons.isEmpty) return null;
+  RoutingNode? closestNode;
+  var closestDistance = double.infinity;
+
+  for (final node in nodes) {
+    final position = GeoPoint(node.longitude, node.latitude);
+    if (isPositionStrictlyInsideHall(position, hall.polygons)) continue;
+    final distance = _distanceToHallBoundary(position, hall.polygons);
+    if (distance < closestDistance) {
+      closestNode = node;
+      closestDistance = distance;
+    }
+  }
+
+  return closestNode;
+}
+
+RoutingNode? findReachableHallExteriorApproachNode({
+  required MapFeature hall,
+  required List<RoutingNode> nodes,
+  required List<RoutingEdge> edges,
+  required String networkAnchorNodeId,
+}) {
+  final reachableIds = reachableNodeIds(networkAnchorNodeId, edges);
+  final connectedNodes = reachableIds.length > 1
+      ? nodes.where((node) => reachableIds.contains(node.id)).toList()
+      : nodes;
+  return findHallExteriorApproachNode(hall, connectedNodes);
+}
+
 RouteResult? shortestPath(
   String startId,
   String endId,
@@ -263,13 +419,16 @@ RouteResult? findNavigableRoute(
     final lngDelta = toRadians(right.longitude - left.longitude);
     final leftLat = toRadians(left.latitude);
     final rightLat = toRadians(right.latitude);
-    final haversine = math.sin(latDelta / 2) * math.sin(latDelta / 2) +
+    final haversine =
+        math.sin(latDelta / 2) * math.sin(latDelta / 2) +
         math.cos(leftLat) *
             math.cos(rightLat) *
             math.sin(lngDelta / 2) *
             math.sin(lngDelta / 2);
     final bounded = math.min(1.0, math.max(0.0, haversine));
-    return earthRadiusMeters * 2 * math.atan2(math.sqrt(bounded), math.sqrt(1.0 - bounded));
+    return earthRadiusMeters *
+        2 *
+        math.atan2(math.sqrt(bounded), math.sqrt(1.0 - bounded));
   }
 
   if (edges.isEmpty) return null;
@@ -277,6 +436,7 @@ RouteResult? findNavigableRoute(
   void connect(String source, String target, double dist) {
     graph.putIfAbsent(source, () => []).add(MapEntry(target, dist));
   }
+
   for (final edge in edges) {
     final src = edge.sourceNodeId;
     final dst = edge.targetNodeId;
@@ -355,4 +515,3 @@ String travelTimeLabel(double durationSeconds) {
   final remainingMinutes = minutes % 60;
   return '~$hours hr${remainingMinutes > 0 ? ' $remainingMinutes min' : ''}';
 }
-

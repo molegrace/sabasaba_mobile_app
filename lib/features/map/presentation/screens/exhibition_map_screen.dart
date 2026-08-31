@@ -651,15 +651,16 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     startLabel: _startLocationId == gpsStartId
                         ? 'Live GPS Location'
                         : ((startLoc?.companyName != null &&
-                                startLoc!.companyName!.trim().isNotEmpty)
-                            ? startLoc.companyName!
-                            : (startLoc?.label ?? 'Start Location')),
-                    endLabel: (endLoc?.companyName != null &&
+                                  startLoc!.companyName!.trim().isNotEmpty)
+                              ? startLoc.companyName!
+                              : (startLoc?.label ?? 'Start Location')),
+                    endLabel:
+                        (endLoc?.companyName != null &&
                             endLoc!.companyName!.trim().isNotEmpty)
                         ? endLoc.companyName!
                         : (endLoc?.label ??
-                            _selectedFeatureInfo?.label ??
-                            'Destination'),
+                              _selectedFeatureInfo?.label ??
+                              'Destination'),
                     onEdit: () => setState(() => _activePanel = 'route'),
                     onClear: _clearRoute,
                     clearLabel: _navigationProgress != null ? 'Stop' : 'Clear',
@@ -1764,6 +1765,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     // Check if destination is linked to a hall feature or inside a hall polygon
     final hallFeatureId =
         destination.properties['hall_feature_id']?.toString() ??
+        destination.properties['parent_feature_id']?.toString() ??
         destination.featureId;
     MapFeature? hall = data.buildings
         .where((b) => b.featureId == hallFeatureId || b.key == hallFeatureId)
@@ -1771,11 +1773,11 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 
     if (hall == null) {
       for (final building in data.buildings) {
-        for (final polygon in building.polygons) {
-          if (_isPointInsidePolygon(destination.position, polygon)) {
-            hall = building;
-            break;
-          }
+        if (isPositionStrictlyInsideHall(
+          destination.position,
+          building.polygons,
+        )) {
+          hall = building;
         }
         if (hall != null) break;
       }
@@ -1788,44 +1790,14 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       return defaultNode ?? nearestNode(destination.position, data.nodes);
     }
 
-    // Destination is inside a hall! Find nearest path node OUTSIDE the hall polygon
-    final hallPolygons = hall.polygons;
-    final exteriorNodes = data.nodes.where((node) {
-      final nodePoint = GeoPoint(node.longitude, node.latitude);
-      for (final polygon in hallPolygons) {
-        if (_isPointInsidePolygon(nodePoint, polygon)) {
-          return false; // Skip nodes inside the hall
-        }
-      }
-      return true; // Keep exterior nodes
-    }).toList();
-
-    if (exteriorNodes.isEmpty) {
-      return nearestNode(hall.center, data.nodes);
-    }
-
-    // Return the exterior node closest to the hall center / perimeter entrance
-    return nearestNode(hall.center, exteriorNodes);
-  }
-
-  bool _isPointInsidePolygon(GeoPoint point, List<GeoPoint> polygon) {
-    if (polygon.length < 3) return false;
-    var inside = false;
-    var j = polygon.length - 1;
-    for (var i = 0; i < polygon.length; i++) {
-      final pi = polygon[i];
-      final pj = polygon[j];
-      if ((pi.lat > point.lat) != (pj.lat > point.lat) &&
-          (point.lng <
-              (pj.lng - pi.lng) *
-                      (point.lat - pi.lat) /
-                      (pj.lat - pi.lat) +
-                  pi.lng)) {
-        inside = !inside;
-      }
-      j = i;
-    }
-    return inside;
+    final gateNode = nearestNode(_sabasabaGate, data.nodes);
+    return findReachableHallExteriorApproachNode(
+          hall: hall,
+          nodes: data.nodes,
+          edges: data.edges,
+          networkAnchorNodeId: gateNode.id,
+        ) ??
+        nearestNode(hall.center, data.nodes);
   }
 
   RoutingLocation? _findLocation(
@@ -1864,7 +1836,12 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
       return _userLocation ?? const GeoPoint(39.27701, -6.86392);
     }
     final loc = _findLocation(data.locations, id, data);
-    return loc?.position;
+    if (loc == null) return null;
+    if (id == _endLocationId && data.nodes.isNotEmpty) {
+      final destinationNode = _resolveDestinationNode(loc, data);
+      return GeoPoint(destinationNode.longitude, destinationNode.latitude);
+    }
+    return loc.position;
   }
 
   List<GeoPoint>? get _remainingRoadRoute {
@@ -2079,10 +2056,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
 }
 
 class _FacilityPointersBar extends StatelessWidget {
-  const _FacilityPointersBar({
-    required this.service,
-    required this.onClear,
-  });
+  const _FacilityPointersBar({required this.service, required this.onClear});
 
   final VisitorService service;
   final VoidCallback onClear;
@@ -2126,10 +2100,7 @@ class _FacilityPointersBar extends StatelessWidget {
                 const SizedBox(height: 2),
                 const Text(
                   'Showing location pointers across the grounds',
-                  style: TextStyle(
-                    color: Color(0xffbae6fd),
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: Color(0xffbae6fd), fontSize: 11),
                 ),
               ],
             ),

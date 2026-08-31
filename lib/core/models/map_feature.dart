@@ -119,7 +119,12 @@ class MapFeature {
             if (feature['label'] != null) 'name': feature['label'],
             if (feature['code'] != null) 'code': feature['code'],
             if (feature['status'] != null) 'status': feature['status'],
+            if (feature['parent_feature_id'] != null)
+              'parent_feature_id': feature['parent_feature_id'],
           };
+    if (feature['parent_feature_id'] != null) {
+      properties['parent_feature_id'] = feature['parent_feature_id'];
+    }
     final geometry = feature['geometry'] as Map<String, dynamic>;
     final type = geometry['type'] as String;
     final coordinates = geometry['coordinates'];

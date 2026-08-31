@@ -71,7 +71,12 @@ class _RawFeature {
             if (json['label'] != null) 'name': json['label'],
             if (json['code'] != null) 'code': json['code'],
             if (json['status'] != null) 'status': json['status'],
+            if (json['parent_feature_id'] != null)
+              'parent_feature_id': json['parent_feature_id'],
           };
+    if (json['parent_feature_id'] != null) {
+      rawProps['parent_feature_id'] = json['parent_feature_id'];
+    }
     return _RawFeature(
       id: json['id'] as String,
       layerId: json['layer_id'] as String? ?? '',
@@ -79,7 +84,6 @@ class _RawFeature {
       properties: rawProps,
     );
   }
-
 
   /// Compute centroid of the feature's geometry.
   GeoPoint? get center {
@@ -96,10 +100,7 @@ class _RawFeature {
     if (value is! List) return [];
     if (value.length >= 2 && value[0] is num && value[1] is num) {
       return [
-        GeoPoint(
-          (value[0] as num).toDouble(),
-          (value[1] as num).toDouble(),
-        ),
+        GeoPoint((value[0] as num).toDouble(), (value[1] as num).toDouble()),
       ];
     }
     return [for (final v in value) ..._collectGeoPoints(v)];
@@ -112,7 +113,8 @@ class ExhibitionMapData {
     defaultValue: 'https://sabasaba.alphabeti.co.tz/api/map',
   );
 
-  static const _supabaseUrl = 'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1';
+  static const _supabaseUrl =
+      'https://iqmcidsxvbsbbukjloew.supabase.co/rest/v1';
   static const _supabaseKey = 'sb_publishable_AMEQ6X4TMeyGz1JlCledzg_9k2ojRkV';
   static const _headers = {
     'apikey': _supabaseKey,
@@ -189,22 +191,24 @@ class ExhibitionMapData {
     if (rawData is! Map) {
       final rawError = root['error'];
       final message = rawError is Map ? rawError['message'] : rawError;
-      throw FormatException(message?.toString() ?? 'Navigator map data is missing.');
+      throw FormatException(
+        message?.toString() ?? 'Navigator map data is missing.',
+      );
     }
     final data = Map<String, dynamic>.from(rawData);
-    final rawLayers = data['layers'] is List ? data['layers'] as List : const [];
-    final nodes = (data['routingNodes'] is List
-            ? data['routingNodes'] as List
-            : const [])
-        .whereType<Map>()
-        .map((row) => RoutingNode.fromJson(Map<String, dynamic>.from(row)))
-        .toList();
-    final edges = (data['routingEdges'] is List
-            ? data['routingEdges'] as List
-            : const [])
-        .whereType<Map>()
-        .map((row) => RoutingEdge.fromJson(Map<String, dynamic>.from(row)))
-        .toList();
+    final rawLayers = data['layers'] is List
+        ? data['layers'] as List
+        : const [];
+    final nodes =
+        (data['routingNodes'] is List ? data['routingNodes'] as List : const [])
+            .whereType<Map>()
+            .map((row) => RoutingNode.fromJson(Map<String, dynamic>.from(row)))
+            .toList();
+    final edges =
+        (data['routingEdges'] is List ? data['routingEdges'] as List : const [])
+            .whereType<Map>()
+            .map((row) => RoutingEdge.fromJson(Map<String, dynamic>.from(row)))
+            .toList();
 
     final buildings = <MapFeature>[];
     final roads = <MapFeature>[];
@@ -229,15 +233,16 @@ class ExhibitionMapData {
       );
       layerMetaById[layerId] = meta;
 
-      final rawFeatures =
-          layer['features'] is List ? layer['features'] as List : const [];
+      final rawFeatures = layer['features'] is List
+          ? layer['features'] as List
+          : const [];
       final targetLayer = editorKey == 'roads'
           ? Layer.road
           : editorKey == 'trees'
-              ? Layer.tree
-              : editorKey == 'boundary'
-                  ? Layer.boundary
-                  : Layer.building;
+          ? Layer.tree
+          : editorKey == 'boundary'
+          ? Layer.boundary
+          : Layer.building;
 
       for (var index = 0; index < rawFeatures.length; index++) {
         final rawFeature = rawFeatures[index];
@@ -318,7 +323,8 @@ class ExhibitionMapData {
       if (position == null) continue;
       final layerName = layerMetaById[rawFeature.layerId]?.name ?? '';
       final props = rawFeature.properties;
-      final rawCompany = props['company_name'] ??
+      final rawCompany =
+          props['company_name'] ??
           props['companyName'] ??
           props['company'] ??
           props['exhibitor'] ??
@@ -327,28 +333,30 @@ class ExhibitionMapData {
 
       final companyName =
           rawCompany != null && rawCompany.toString().trim().isNotEmpty
-              ? rawCompany.toString().trim()
-              : null;
-      final rawIndustry = props['industry'] ??
+          ? rawCompany.toString().trim()
+          : null;
+      final rawIndustry =
+          props['industry'] ??
           props['industry_name'] ??
           props['sector'] ??
           props['category'];
       final industries = props['industries'] is List
           ? (props['industries'] as List)
-              .map((item) => item.toString())
-              .toList()
+                .map((item) => item.toString())
+                .toList()
           : rawIndustry == null
-              ? <String>[]
-              : [rawIndustry.toString()];
+          ? <String>[]
+          : [rawIndustry.toString()];
       final offerings = props['offerings'] is List
           ? (props['offerings'] as List)
-              .whereType<Map>()
-              .map(
-                (item) => Offering.fromJson(Map<String, dynamic>.from(item)),
-              )
-              .toList()
+                .whereType<Map>()
+                .map(
+                  (item) => Offering.fromJson(Map<String, dynamic>.from(item)),
+                )
+                .toList()
           : null;
-      final baseValue = props['name'] ??
+      final baseValue =
+          props['name'] ??
           props['booth_code'] ??
           props['number'] ??
           props['1'] ??
@@ -358,11 +366,13 @@ class ExhibitionMapData {
       final boothTag = boothNumber == null || boothNumber.isEmpty
           ? ''
           : ' • ${boothNumber.startsWith('Booth') ? boothNumber : 'Booth $boothNumber'}';
-      final label = companyName == null ? labelText : '$labelText ($companyName)';
+      final label = companyName == null
+          ? labelText
+          : '$labelText ($companyName)';
       final description = companyName == null
           ? layerName
           : 'Exhibitor: $companyName$boothTag'
-              '${industries.isEmpty ? '' : ' (${industries.join(', ')})'} • $layerName';
+                '${industries.isEmpty ? '' : ' (${industries.join(', ')})'} • $layerName';
 
       locations.add(
         RoutingLocation(
@@ -415,20 +425,21 @@ class ExhibitionMapData {
       if (id == null || companyName == null || boothNumber == null) continue;
       final industries = destination['industries'] is List
           ? (destination['industries'] as List)
-              .map((item) => item.toString())
-              .toList()
+                .map((item) => item.toString())
+                .toList()
           : <String>[];
       final offerings = destination['offerings'] is List
           ? (destination['offerings'] as List)
-              .whereType<Map>()
-              .map(
-                (item) => Offering.fromJson(Map<String, dynamic>.from(item)),
-              )
-              .toList()
+                .whereType<Map>()
+                .map(
+                  (item) => Offering.fromJson(Map<String, dynamic>.from(item)),
+                )
+                .toList()
           : null;
       final hallName =
           destination['hall_name']?.toString() ?? hallFeature.layerName;
       final properties = <String, dynamic>{
+        'hall_feature_id': hallFeatureId,
         'company_name': companyName,
         'company_id': destination['company_id'],
         'description': destination['description'],
@@ -493,9 +504,12 @@ class ExhibitionMapData {
           'No ongoing or closed exhibition found in the database.',
         );
       }
-      final exhibition =
-          Exhibition.fromJson(exhibitionList.first as Map<String, dynamic>);
-      print('SabaSaba - Active exhibition: ${exhibition.title} (${exhibition.status})');
+      final exhibition = Exhibition.fromJson(
+        exhibitionList.first as Map<String, dynamic>,
+      );
+      print(
+        'SabaSaba - Active exhibition: ${exhibition.title} (${exhibition.status})',
+      );
 
       // 2. Get the active map for this exhibition
       final mapResponse = await http
@@ -589,10 +603,26 @@ class ExhibitionMapData {
           .toList();
 
       // 6. Fetch all data in parallel
-      final buildingsFuture = _fetchFeatures(buildingLayerIds, Layer.building, layerMetaById);
-      final roadsFuture = _fetchFeaturesForLayer(roadLayerId, Layer.road, layerMeta: layerMetaById[roadLayerId]);
-      final treesFuture = _fetchFeaturesForLayer(treeLayerId, Layer.tree, layerMeta: layerMetaById[treeLayerId]);
-      final boundariesFuture = _fetchFeaturesForLayer(boundaryLayerId, Layer.boundary, layerMeta: layerMetaById[boundaryLayerId]);
+      final buildingsFuture = _fetchFeatures(
+        buildingLayerIds,
+        Layer.building,
+        layerMetaById,
+      );
+      final roadsFuture = _fetchFeaturesForLayer(
+        roadLayerId,
+        Layer.road,
+        layerMeta: layerMetaById[roadLayerId],
+      );
+      final treesFuture = _fetchFeaturesForLayer(
+        treeLayerId,
+        Layer.tree,
+        layerMeta: layerMetaById[treeLayerId],
+      );
+      final boundariesFuture = _fetchFeaturesForLayer(
+        boundaryLayerId,
+        Layer.boundary,
+        layerMeta: layerMetaById[boundaryLayerId],
+      );
       final nodesFuture = _fetchNodes(mapId);
       final edgesFuture = _fetchEdges(mapId);
       // Fetch all navigable features in a single request
@@ -636,18 +666,19 @@ class ExhibitionMapData {
           final layerMeta = layerMetaById[rawFeature.layerId];
           final layerName = layerMeta?.name ?? '';
           final props = rawFeature.properties;
-          final rawComp = props['company_name'] ??
+          final rawComp =
+              props['company_name'] ??
               props['companyName'] ??
               props['company'] ??
               props['exhibitor'];
 
-
           final companyName =
               rawComp != null && rawComp.toString().trim().isNotEmpty
-                  ? rawComp.toString().trim()
-                  : null;
+              ? rawComp.toString().trim()
+              : null;
 
-          final rawInd = props['industry'] ??
+          final rawInd =
+              props['industry'] ??
               props['industry_name'] ??
               props['sector'] ??
               props['category'];
@@ -657,12 +688,18 @@ class ExhibitionMapData {
           final industry = industries.isNotEmpty ? industries.first : null;
 
           final logoUrl = props['logo_url']?.toString();
-          final photos = props['photos'] is List ? props['photos'] as List : null;
+          final photos = props['photos'] is List
+              ? props['photos'] as List
+              : null;
           final team = props['team'] is List ? props['team'] as List : null;
           final offerings = props['offerings'] is List
               ? (props['offerings'] as List)
-                  .map((o) => Offering.fromJson(Map<String, dynamic>.from(o as Map)))
-                  .toList()
+                    .map(
+                      (o) => Offering.fromJson(
+                        Map<String, dynamic>.from(o as Map),
+                      ),
+                    )
+                    .toList()
               : null;
 
           final boothNumberStr = props['booth_number']?.toString();
@@ -671,15 +708,18 @@ class ExhibitionMapData {
               : '';
 
           // Build label matching web's featureLabel function
-          final baseValue = props['name'] ??
+          final baseValue =
+              props['name'] ??
               props['booth_code'] ??
               props['number'] ??
               props['1'] ??
               props['id'];
-          final labelText =
-              baseValue != null ? baseValue.toString() : '$layerName ${i + 1}';
-          final label =
-              companyName != null ? '$labelText ($companyName)' : labelText;
+          final labelText = baseValue != null
+              ? baseValue.toString()
+              : '$layerName ${i + 1}';
+          final label = companyName != null
+              ? '$labelText ($companyName)'
+              : labelText;
           final description = companyName != null
               ? 'Exhibitor: $companyName$boothTag${industries.isNotEmpty ? ' (${industries.join(', ')})' : ''} • $layerName'
               : layerName;
@@ -703,7 +743,8 @@ class ExhibitionMapData {
               searchTerms: [
                 if (boothNumberStr != null) boothNumberStr,
                 layerName,
-                if (props['legacy_products'] != null) props['legacy_products'].toString(),
+                if (props['legacy_products'] != null)
+                  props['legacy_products'].toString(),
               ],
               properties: props,
             ),
@@ -724,10 +765,14 @@ class ExhibitionMapData {
         exhibition: exhibition,
       );
     } on TimeoutException {
-      throw Exception('Map loading timed out. Please check internet connection and try again.');
+      throw Exception(
+        'Map loading timed out. Please check internet connection and try again.',
+      );
     } catch (e) {
       if (e.toString().contains('TimeoutException')) {
-        throw Exception('Map loading timed out. Please check internet connection and try again.');
+        throw Exception(
+          'Map loading timed out. Please check internet connection and try again.',
+        );
       }
       rethrow;
     }
@@ -798,8 +843,7 @@ class ExhibitionMapData {
           Uri.parse(
             '$_supabaseUrl/features'
             '?layer_id=in.($idsStr)'
-            '&select=id,layer_id,label,code,status,public_id,geometry_type,geometry,properties,sort_order',
-
+            '&select=id,layer_id,label,code,status,parent_feature_id,public_id,geometry_type,geometry,properties,sort_order',
           ),
           headers: _headers,
         )
@@ -810,7 +854,6 @@ class ExhibitionMapData {
         .map((item) => _RawFeature.fromJson(item as Map<String, dynamic>))
         .toList();
   }
-
 
   static Future<List<RoutingNode>> _fetchNodes(String mapId) async {
     final response = await http
@@ -907,9 +950,9 @@ class ExhibitionMapData {
     final lengthSquared = segment.dx * segment.dx + segment.dy * segment.dy;
     if (lengthSquared == 0) return (point - start).distance;
     final relative = point - start;
-    final ratio = ((relative.dx * segment.dx + relative.dy * segment.dy) /
-            lengthSquared)
-        .clamp(0.0, 1.0);
+    final ratio =
+        ((relative.dx * segment.dx + relative.dy * segment.dy) / lengthSquared)
+            .clamp(0.0, 1.0);
     final closest = start + segment * ratio;
     return (point - closest).distance;
   }
