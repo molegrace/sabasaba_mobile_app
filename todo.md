@@ -161,6 +161,8 @@ Show messages such as:
 - “This is not the required direction.”
 - “Turn back toward the highlighted route.”
 
+////////////////////////
+
 8. Warning interface
 
 Implement equivalent warnings in Next.js and Flutter:
