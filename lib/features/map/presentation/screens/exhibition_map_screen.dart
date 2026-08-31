@@ -1315,9 +1315,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           : gateLocation != null && gateLocation.nodeId != 'no_node'
           ? gateLocation.nodeId
           : nearestNode(_sabasabaGate, data.nodes).id;
+      final endNode = _resolveDestinationNode(destination, data);
       final routeResult = findNavigableRoute(
         startNodeId,
-        destination.nodeId,
+        endNode.id,
         data.nodes,
         data.edges,
       );
@@ -1755,6 +1756,77 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  RoutingNode _resolveDestinationNode(
+    RoutingLocation destination,
+    ExhibitionMapData data,
+  ) {
+    // Check if destination is linked to a hall feature or inside a hall polygon
+    final hallFeatureId =
+        destination.properties['hall_feature_id']?.toString() ??
+        destination.featureId;
+    MapFeature? hall = data.buildings
+        .where((b) => b.featureId == hallFeatureId || b.key == hallFeatureId)
+        .firstOrNull;
+
+    if (hall == null) {
+      for (final building in data.buildings) {
+        for (final polygon in building.polygons) {
+          if (_isPointInsidePolygon(destination.position, polygon)) {
+            hall = building;
+            break;
+          }
+        }
+        if (hall != null) break;
+      }
+    }
+
+    if (hall == null) {
+      final defaultNode = data.nodes
+          .where((n) => n.id == destination.nodeId)
+          .firstOrNull;
+      return defaultNode ?? nearestNode(destination.position, data.nodes);
+    }
+
+    // Destination is inside a hall! Find nearest path node OUTSIDE the hall polygon
+    final hallPolygons = hall.polygons;
+    final exteriorNodes = data.nodes.where((node) {
+      final nodePoint = GeoPoint(node.longitude, node.latitude);
+      for (final polygon in hallPolygons) {
+        if (_isPointInsidePolygon(nodePoint, polygon)) {
+          return false; // Skip nodes inside the hall
+        }
+      }
+      return true; // Keep exterior nodes
+    }).toList();
+
+    if (exteriorNodes.isEmpty) {
+      return nearestNode(hall.center, data.nodes);
+    }
+
+    // Return the exterior node closest to the hall center / perimeter entrance
+    return nearestNode(hall.center, exteriorNodes);
+  }
+
+  bool _isPointInsidePolygon(GeoPoint point, List<GeoPoint> polygon) {
+    if (polygon.length < 3) return false;
+    var inside = false;
+    var j = polygon.length - 1;
+    for (var i = 0; i < polygon.length; i++) {
+      final pi = polygon[i];
+      final pj = polygon[j];
+      if ((pi.lat > point.lat) != (pj.lat > point.lat) &&
+          (point.lng <
+              (pj.lng - pi.lng) *
+                      (point.lat - pi.lat) /
+                      (pj.lat - pi.lat) +
+                  pi.lng)) {
+        inside = !inside;
+      }
+      j = i;
+    }
+    return inside;
+  }
 
   RoutingLocation? _findLocation(
     List<RoutingLocation> locations,
