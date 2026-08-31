@@ -243,9 +243,9 @@ class NavigationProgressTracker {
   }
 
   final List<GeoPoint> route;
-  var _offRouteCount = 0;
-  var _recoveryCount = 0;
-  var _backwardCount = 0;
+  final _offRouteDetector = OffRouteDetector();
+  final _wrongDirectionDetector = WrongDirectionDetector();
+
   var _arrivalCount = 0;
   var _displayedProgress = 0.0;
   NavigationReading? _previousReading;
@@ -265,36 +265,29 @@ class NavigationProgressTracker {
       return _lastProgress;
     }
 
-    final effectiveOffRouteDistance = math.max(
-      NavigationConfig.offRouteDistance,
-      reading.accuracy * 1.25,
+    final offRouteState = _offRouteDetector.processReading(
+      distanceFromRoute: match.distanceFromRoute,
+      accuracy: reading.accuracy,
     );
-    final effectiveRecoveryDistance = math.max(
-      NavigationConfig.recoveryDistance,
-      reading.accuracy,
-    );
-    if (match.distanceFromRoute > effectiveOffRouteDistance) {
-      _offRouteCount++;
-      _recoveryCount = 0;
-    } else if (match.distanceFromRoute <= effectiveRecoveryDistance) {
-      _recoveryCount++;
-      _offRouteCount = 0;
-    }
 
     final previous = _previousReading;
     final movement = previous == null
         ? 0.0
         : geoDistanceMeters(previous.position, reading.position);
-    final moving =
-        movement >= NavigationConfig.minimumMovement ||
-        (reading.speed ?? 0) >= 0.5;
+
     final progressDelta =
         match.progressDistance - _lastProgress.progressDistance;
-    if (moving && progressDelta < -NavigationConfig.backwardTolerance) {
-      _backwardCount++;
-    } else if (progressDelta >= -NavigationConfig.backwardTolerance) {
-      _backwardCount = 0;
-    }
+
+    final isWrongDirection = _wrongDirectionDetector.processReading(
+      progressDelta: progressDelta,
+      movement: movement,
+      speed: reading.speed,
+    );
+
+    final effectiveOffRouteDistance = math.max(
+      NavigationConfig.offRouteDistance,
+      reading.accuracy * 1.25,
+    );
 
     _arrivalCount =
         match.remainingDistance <= NavigationConfig.arrivalDistance &&
@@ -306,19 +299,19 @@ class NavigationProgressTracker {
     if (_arrivalCount >= NavigationConfig.arrivalReadings) {
       status = NavigationStatus.arrived;
       message = 'You have arrived at your destination.';
-    } else if (_offRouteCount >= NavigationConfig.offRouteReadings ||
+    } else if (offRouteState.isOffRoute ||
         (_lastProgress.status == NavigationStatus.offRoute &&
-            _recoveryCount < NavigationConfig.recoveryReadings)) {
+            !offRouteState.isRecovered)) {
       status = NavigationStatus.offRoute;
       message =
           'You are off the required path. Return to the highlighted route or recalculate.';
-    } else if (_backwardCount >= NavigationConfig.wrongDirectionReadings) {
+    } else if (isWrongDirection) {
       status = NavigationStatus.wrongDirection;
       message =
           'You are moving away from the destination. Turn back toward the highlighted route.';
     } else if ((_lastProgress.status == NavigationStatus.offRoute ||
             _lastProgress.status == NavigationStatus.wrongDirection) &&
-        _recoveryCount >= NavigationConfig.recoveryReadings) {
+        offRouteState.isRecovered) {
       message = 'You are back on the correct route.';
     }
 
