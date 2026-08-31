@@ -1523,7 +1523,10 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
           'The calculated route does not contain enough mapped coordinates.',
         );
       }
-      final navigationTracker = NavigationProgressTracker(completeCoordinates);
+      final navigationTracker = NavigationProgressTracker(
+        completeCoordinates,
+        destinationName: destination.label,
+      );
       final initialProgress = navigationTracker.update(initialReading);
 
       setState(() {

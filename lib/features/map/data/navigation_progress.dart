@@ -228,7 +228,7 @@ RouteMatch? matchPositionAtDistance(
 }
 
 class NavigationProgressTracker {
-  NavigationProgressTracker(this.route) {
+  NavigationProgressTracker(this.route, {this.destinationName}) {
     final initial = matchPositionToRoute(route.first, route);
     if (initial == null) {
       throw ArgumentError(
@@ -243,6 +243,7 @@ class NavigationProgressTracker {
   }
 
   final List<GeoPoint> route;
+  final String? destinationName;
   final _offRouteDetector = OffRouteDetector();
   final _wrongDirectionDetector = WrongDirectionDetector();
 
@@ -298,7 +299,9 @@ class NavigationProgressTracker {
     String? message;
     if (_arrivalCount >= NavigationConfig.arrivalReadings) {
       status = NavigationStatus.arrived;
-      message = 'You have arrived at your destination.';
+      message = destinationName != null && destinationName!.trim().isNotEmpty
+          ? 'You have arrived at ${destinationName!.trim()}.'
+          : 'You have arrived at your destination.';
     } else if (offRouteState.isOffRoute ||
         (_lastProgress.status == NavigationStatus.offRoute &&
             !offRouteState.isRecovered)) {

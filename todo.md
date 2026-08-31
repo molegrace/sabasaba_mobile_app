@@ -304,19 +304,3 @@ Flutter validation:
 - Run `flutter test`.
 - Build the Android application if the environment supports it.
 
-Acceptance criteria:
-
-- Both applications show the complete initial route.
-- The highlighted route shortens as the user walks forward.
-- Remaining distance and time decrease.
-- GPS noise does not cause unstable progress.
-- Walking away from the route produces a clear warning.
-- Walking in the reverse direction produces a wrong-direction warning.
-- Returning to the route clears the warning.
-- Confirmed off-route movement can trigger rerouting.
-- On-site users route from a reachable nearby path instead of Gate 1.
-- Arrival is detected and communicated.
-- No direction line cuts through buildings unless an actual routing edge exists there.
-- Next.js and Flutter provide consistent navigation behavior.
-- Existing functionality and tests remain working.
-```
