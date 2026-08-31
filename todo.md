@@ -66,6 +66,7 @@ Both:
 - Do not use unreliable readings for route decisions when accuracy is worse than approximately 30 metres.
 - Continue displaying the accuracy circle.
 
+/////////////////
 4. Match the user to the route
 
 Create testable route-matching utilities in both languages.
@@ -96,6 +97,9 @@ For every reliable GPS reading:
 - Prevent progress from jumping backwards because of minor GPS noise.
 
 Use geographic distance calculations rather than raw latitude/longitude subtraction.
+
+//////////////////
+
 
 5. Shrink the route while walking
 
