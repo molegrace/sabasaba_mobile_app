@@ -43,6 +43,7 @@ part 'features/map/data/routing_engine.dart';
 part 'features/map/data/navigation_progress.dart';
 part 'features/map/data/polyline_matcher.dart';
 part 'features/map/data/off_route_detector.dart';
+part 'features/map/data/wrong_direction_detector.dart';
 part 'features/map/data/route_progress.dart';
 part 'features/map/data/navigation_session.dart';
 part 'features/map/data/exhibition_map_data.dart';
