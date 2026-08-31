@@ -304,7 +304,7 @@ class NavigationProgressTracker {
             !offRouteState.isRecovered)) {
       status = NavigationStatus.offRoute;
       message =
-          'You are off the required path. Return to the highlighted route or recalculate.';
+          'You are off the required path. Return to the highlighted route.';
     } else if (isWrongDirection) {
       status = NavigationStatus.wrongDirection;
       message =

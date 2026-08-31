@@ -61,6 +61,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
   DateTime? _lastAutoRerouteTime;
   int _consecutiveOffRouteReadings = 0;
   String? _userLocationDistrict;
+  Timer? _warningBannerTimer;
+  bool _showWarningBanner = false;
   List<String> _savedIds = [];
 
   // ─── Other tab state ────────────────────────────────────────────────────────
@@ -162,10 +164,30 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     final tracker = _navigationTracker;
     final progress = tracker?.update(reading);
 
+    void triggerWarningBanner() {
+      _warningBannerTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          _showWarningBanner = true;
+        });
+      }
+      _warningBannerTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _showWarningBanner = false;
+          });
+        }
+      });
+    }
+
     if (progress != null &&
-        prevProgress?.status != NavigationStatus.offRoute &&
-        progress.status == NavigationStatus.offRoute) {
-      HapticFeedback.heavyImpact();
+        (progress.status == NavigationStatus.offRoute ||
+            progress.status == NavigationStatus.wrongDirection ||
+            progress.status == NavigationStatus.arrived)) {
+      if (prevProgress?.status != progress.status ||
+          prevProgress?.message != progress.message) {
+        triggerWarningBanner();
+      }
     }
 
     setState(() {
@@ -209,7 +231,7 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
     }
     _positionSubscription?.cancel();
     _connectivitySubscription?.cancel();
-
+    _warningBannerTimer?.cancel();
     _connectionBannerTimer?.cancel();
     _authNameController.dispose();
     _authEmailController.dispose();
@@ -658,7 +680,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (_navigationProgress != null &&
+                      if (_showWarningBanner &&
+                          _navigationProgress != null &&
                           _navigationProgress!.message != null &&
                           (_navigationProgress!.status == NavigationStatus.offRoute ||
                               _navigationProgress!.status == NavigationStatus.wrongDirection ||
@@ -666,9 +689,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                         NavigationWarningBanner(
                           status: _navigationProgress!.status,
                           message: _navigationProgress!.message!,
-                          onRecalculate: _navigationProgress!.status != NavigationStatus.arrived
-                              ? () => _calculateRoute(data)
-                              : null,
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -727,7 +747,8 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                   ),
                 ),
 
-              if (_navigationProgress != null &&
+              if (_showWarningBanner &&
+                  _navigationProgress != null &&
                   (_navigationProgress!.status == NavigationStatus.offRoute ||
                       _navigationProgress!.status ==
                           NavigationStatus.wrongDirection ||
@@ -741,10 +762,6 @@ class _ExhibitionMapScreenState extends State<ExhibitionMapScreen>
                     status: _navigationProgress!.status,
                     message:
                         _navigationProgress!.message ?? 'Navigation update',
-                    onRecalculate:
-                        _navigationProgress!.status == NavigationStatus.arrived
-                        ? null
-                        : () => _navigateFromGpsToDestination(data),
                   ),
                 ),
 

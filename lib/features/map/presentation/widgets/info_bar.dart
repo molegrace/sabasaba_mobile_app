@@ -157,12 +157,10 @@ class NavigationWarningBanner extends StatelessWidget {
     super.key,
     required this.status,
     required this.message,
-    this.onRecalculate,
   });
 
   final NavigationStatus status;
   final String message;
-  final VoidCallback? onRecalculate;
 
   @override
   Widget build(BuildContext context) {
@@ -204,33 +202,13 @@ class NavigationWarningBanner extends StatelessWidget {
             Icon(icon, color: color, size: 22),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    message,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (onRecalculate != null) ...[
-                    const SizedBox(height: 6),
-                    TextButton.icon(
-                      onPressed: onRecalculate,
-                      icon: const Icon(Icons.refresh_rounded, size: 16),
-                      label: const Text('Recalculate route'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: color,
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                  ],
-                ],
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
